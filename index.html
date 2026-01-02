@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>DealFlow Pro - CRM (Working v1.1)</title>
+  <title>DealFlow Pro - CRM (Working v1)</title>
 
   <!-- Tailwind (prototype CDN) -->
   <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
@@ -62,9 +62,8 @@
     }
     .quick-add-btn:hover { background-color: #6b7280; }
 
-    /* Accessibility: keep keyboard focus visible */
+    /* Simple focus outline for accessibility */
     :focus { outline: none; }
-    :focus-visible { outline: 2px solid rgba(59,130,246,.8); outline-offset: 2px; }
     .focus-ring:focus { box-shadow: 0 0 0 3px rgba(59,130,246,.35); border-color: rgba(59,130,246,.9); }
   </style>
 </head>
@@ -78,7 +77,7 @@
         <h1 class="text-2xl font-bold text-white flex items-center">
           <i class="fas fa-chart-network mr-2"></i> DealFlow Pro
         </h1>
-        <p class="text-sm text-gray-400 mt-1">CRM v1.1 (local only)</p>
+        <p class="text-sm text-gray-400 mt-1">CRM v1 (local only)</p>
       </div>
 
       <nav class="flex-1 px-4">
@@ -292,7 +291,7 @@
                     <h4 class="font-medium text-gray-900 mb-4">Relationship Health</h4>
                     <div class="flex items-center justify-between p-3 bg-red-50 rounded-lg mb-3">
                       <div>
-                        <p class="text-sm font-medium">No touch recorded or 30+ days</p>
+                        <p class="text-sm font-medium">No touch in 30+ days</p>
                         <p class="text-xs text-gray-600">Contacts needing attention</p>
                       </div>
                       <span id="dashNoTouch30" class="bg-red-100 text-red-800 text-sm font-bold px-3 py-1 rounded-full">0</span>
@@ -352,7 +351,9 @@
                     <th class="pb-3 text-right">Actions</th>
                   </tr>
                 </thead>
-                <tbody id="contactsTable" class="text-sm"></tbody>
+                <tbody id="contactsTable" class="text-sm">
+                  <!-- rows -->
+                </tbody>
               </table>
               <div id="contactsEmpty" class="text-sm text-gray-600 hidden py-6">No contacts found.</div>
             </div>
@@ -523,7 +524,7 @@
           <div class="flex items-start justify-between gap-4 mb-6">
             <div>
               <h2 class="text-2xl font-bold text-gray-900">Calendar</h2>
-              <p class="text-gray-600">Appointments stored locally (no external calendar integration in v1.1).</p>
+              <p class="text-gray-600">Appointments stored locally (no external calendar integration in v1).</p>
             </div>
             <div class="flex gap-2">
               <button class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium" data-open-quickadd="appointment">
@@ -551,22 +552,13 @@
               <h2 class="text-2xl font-bold text-gray-900">Activity</h2>
               <p class="text-gray-600">Audit-style log of key actions (create/update/complete/touch).</p>
             </div>
-            <div class="flex gap-2 flex-wrap justify-end">
-              <button class="px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 font-medium" data-action="export-backup">
-                <i class="fas fa-database mr-2"></i> Export Backup
-              </button>
-              <button class="px-4 py-2 bg-gray-100 text-gray-800 rounded-lg hover:bg-gray-200 font-medium" data-action="import-backup">
-                <i class="fas fa-upload mr-2"></i> Import Backup
-              </button>
+            <div class="flex gap-2">
               <button class="px-4 py-2 bg-gray-100 text-gray-800 rounded-lg hover:bg-gray-200 font-medium" data-action="export" data-kind="activities">
                 <i class="fas fa-download mr-2"></i> Export JSON
               </button>
               <button class="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 font-medium" data-action="clear-activity">
                 <i class="fas fa-trash mr-2"></i> Clear Activity
               </button>
-
-              <!-- hidden file input for import -->
-              <input id="backupFile" type="file" accept="application/json" class="hidden" />
             </div>
           </div>
 
@@ -603,7 +595,7 @@
     </div>
   </div>
 
-  <!-- QUICK ADD MODAL -->
+  <!-- QUICK ADD / EDIT MODAL -->
   <div id="quickAddModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full hidden z-50">
     <div class="relative top-16 mx-auto p-5 border w-[420px] shadow-lg rounded-xl bg-white">
       <div class="flex justify-between items-center mb-4">
@@ -741,20 +733,14 @@
 
   <script>
     /*****************************************************************
-     * DealFlow Pro v1.1 (single-file, localStorage persistence)
-     * Key upgrades from v1:
-     * - Schema versioning + migrations
-     * - Date normalization (avoid double-ISO / invalid parse)
-     * - Idempotent automations (no duplicate template tasks)
-     * - Deal stage dropdown (direct set; triggers DD automation safely)
-     * - Deletions unlink tasks instead of deleting audit trail
-     * - Global search debounced (and Escape clears)
-     * - Backup export/import (full state)
+     * Working v1 CRM - Single-file, localStorage persistence.
+     * Enhancements:
+     * - Full Edit support (Contacts, Investors, Deals, Projects, Tasks, Appointments)
+     * - Appointment end time auto-sync to start time (default +90m, and prevents end<start)
      *****************************************************************/
 
     // ---------- Utilities ----------
     const STORAGE_KEY = "dealflowpro_state_v1";
-    const CURRENT_VERSION = 2;
 
     function uid(prefix="id") {
       return `${prefix}_${Math.random().toString(16).slice(2)}_${Date.now().toString(16)}`;
@@ -818,77 +804,6 @@
         notification.classList.remove('translate-x-0'); notification.classList.add('translate-x-full');
         setTimeout(() => { if (notification.parentNode) notification.parentNode.removeChild(notification); }, 300);
       }, 3000);
-    }
-
-    // ---------- Date normalization + schema migration ----------
-    function isIsoString(v) {
-      return typeof v === 'string' && !isNaN(new Date(v).getTime());
-    }
-
-    function toIsoOrNull(v) {
-      if (!v) return null;
-      if (isIsoString(v)) return new Date(v).toISOString();
-      const d = new Date(v);
-      return isNaN(d.getTime()) ? null : d.toISOString();
-    }
-
-    function migrateState(parsed) {
-      const migrated = {
-        meta: parsed.meta && typeof parsed.meta === 'object' ? parsed.meta : {},
-        contacts: Array.isArray(parsed.contacts) ? parsed.contacts : [],
-        investors: Array.isArray(parsed.investors) ? parsed.investors : [],
-        deals: Array.isArray(parsed.deals) ? parsed.deals : [],
-        projects: Array.isArray(parsed.projects) ? parsed.projects : [],
-        tasks: Array.isArray(parsed.tasks) ? parsed.tasks : [],
-        appointments: Array.isArray(parsed.appointments) ? parsed.appointments : [],
-        activities: Array.isArray(parsed.activities) ? parsed.activities : []
-      };
-
-      const fromVersion = Number(migrated.meta.version || 1);
-
-      if (fromVersion < 2) {
-        migrated.tasks.forEach(t => {
-          if (!t.meta || typeof t.meta !== 'object') t.meta = {};
-          t.due_at = toIsoOrNull(t.due_at);
-          t.created_at = toIsoOrNull(t.created_at) || nowIso();
-          t.completed_at = toIsoOrNull(t.completed_at);
-          if (typeof t.completed !== 'boolean') t.completed = false;
-        });
-
-        migrated.deals.forEach(d => {
-          d.created_at = toIsoOrNull(d.created_at) || nowIso();
-          d.close_target_date = toIsoOrNull(d.close_target_date);
-          if (!d.stage) d.stage = 'sourced';
-          if (!d.type) d.type = 'other';
-        });
-
-        migrated.projects.forEach(p => {
-          p.created_at = toIsoOrNull(p.created_at) || nowIso();
-          p.target_date = toIsoOrNull(p.target_date);
-          if (!p.status) p.status = 'planning';
-          if (!p.type) p.type = 'other';
-        });
-
-        migrated.appointments.forEach(a => {
-          a.created_at = toIsoOrNull(a.created_at) || nowIso();
-          a.start_at = toIsoOrNull(a.start_at);
-          a.end_at = toIsoOrNull(a.end_at);
-        });
-
-        migrated.contacts.forEach(c => {
-          if (!('cadence_days' in c)) c.cadence_days = 0;
-          c.created_at = toIsoOrNull(c.created_at) || nowIso();
-          c.last_touch_at = toIsoOrNull(c.last_touch_at);
-          c.next_touch_due_at = toIsoOrNull(c.next_touch_due_at);
-          if (!c.stage) c.stage = 'warm';
-        });
-
-        migrated.meta.version = 2;
-        migrated.meta.last_migrated_at = nowIso();
-      }
-
-      migrated.meta.version = CURRENT_VERSION;
-      return migrated;
     }
 
     // ---------- Enumerations (single source of truth) ----------
@@ -961,7 +876,6 @@
 
     // ---------- State ----------
     const state = {
-      meta: { version: CURRENT_VERSION, last_migrated_at: null },
       contacts: [],
       investors: [],
       deals: [],
@@ -976,17 +890,9 @@
       if (!raw) return false;
       try {
         const parsed = JSON.parse(raw);
-        const migrated = migrateState(parsed);
-
-        state.meta = migrated.meta;
-        state.contacts = migrated.contacts;
-        state.investors = migrated.investors;
-        state.deals = migrated.deals;
-        state.projects = migrated.projects;
-        state.tasks = migrated.tasks;
-        state.appointments = migrated.appointments;
-        state.activities = migrated.activities;
-
+        for (const k of Object.keys(state)) {
+          if (Array.isArray(parsed[k])) state[k] = parsed[k];
+        }
         return true;
       } catch {
         return false;
@@ -1003,6 +909,22 @@
       if (state.activities.length > 500) state.activities = state.activities.slice(0, 500);
     }
 
+    // ---------- Edit helpers ----------
+    function findById(kind, id) {
+      const arr = state[kind] || [];
+      return arr.find(x => x.id === id) || null;
+    }
+
+    function kindForType(type) {
+      if (type === 'contact') return 'contacts';
+      if (type === 'investor') return 'investors';
+      if (type === 'deal') return 'deals';
+      if (type === 'project') return 'projects';
+      if (type === 'task') return 'tasks';
+      if (type === 'appointment') return 'appointments';
+      return null;
+    }
+
     // ---------- Automations ----------
     function ensureCadence(contact) {
       const cadence = clampInt(contact.cadence_days, 0);
@@ -1013,30 +935,22 @@
       contact.next_touch_due_at = next.toISOString();
     }
 
-    function hasAutoTask(autoKey) {
-      return state.tasks.some(t => t?.meta?.auto_key === autoKey);
-    }
-
-    function createTask({ title, description="", due_at=null, link=null, meta=null }) {
+    function createTask({ title, description="", due_at=null, link=null }) {
       const t = {
         id: uid('task'),
         title,
         description,
-        due_at: toIsoOrNull(due_at),
+        due_at,
         completed: false,
         completed_at: null,
         created_at: nowIso(),
-        link,
-        meta: meta && typeof meta === 'object' ? meta : {}
+        link
       };
       state.tasks.unshift(t);
       return t;
     }
 
     function generateDDChecklist(deal) {
-      const templateKey = `dd:${deal.id}:v1`;
-      if (hasAutoTask(templateKey)) return;
-
       const templates = [
         "Request rent roll / T-12",
         "Order property condition assessment",
@@ -1060,8 +974,7 @@
           title: `DD: ${label}`,
           description: `Auto-generated for deal "${deal.name}".`,
           due_at: due ? due.toISOString() : null,
-          link: { type:'deal', id: deal.id },
-          meta: { auto_key: templateKey }
+          link: { type:'deal', id: deal.id }
         });
       });
 
@@ -1102,9 +1015,6 @@
         return;
       }
 
-      const templateKey = `proj_template:${project.id}:${type}:v1`;
-      if (hasAutoTask(templateKey)) return;
-
       steps.forEach((s, idx) => {
         let due = null;
         if (project.target_date) {
@@ -1117,8 +1027,7 @@
           title: `${project.name}: ${s}`,
           description: `Auto-generated from template "${getEnum('projectTypes', type)?.label || type}".`,
           due_at: due ? due.toISOString() : null,
-          link: { type:'project', id: project.id },
-          meta: { auto_key: templateKey }
+          link: { type:'project', id: project.id }
         });
       });
 
@@ -1129,8 +1038,8 @@
       const appt = {
         id: uid('appt'),
         title,
-        start_at: toIsoOrNull(start_at),
-        end_at: toIsoOrNull(end_at),
+        start_at,
+        end_at,
         location,
         notes,
         created_at: nowIso(),
@@ -1138,19 +1047,15 @@
       };
       state.appointments.unshift(appt);
 
-      const start = appt.start_at ? new Date(appt.start_at) : null;
+      const start = start_at ? new Date(start_at) : null;
       if (start && !isNaN(start.getTime())) {
         const prep = new Date(start.getTime() - 24*60*60*1000);
-        const prepKey = `appt_prep:${appt.id}:v1`;
-        if (!hasAutoTask(prepKey)) {
-          createTask({
-            title: `Prep: ${title}`,
-            description: "Auto-generated prep task (24h prior).",
-            due_at: prep.toISOString(),
-            link,
-            meta: { auto_key: prepKey }
-          });
-        }
+        createTask({
+          title: `Prep: ${title}`,
+          description: "Auto-generated prep task (24h prior).",
+          due_at: prep.toISOString(),
+          link
+        });
         addActivity(`Appointment "${title}" created; prep task generated.`, { appointment_id: appt.id });
       } else {
         addActivity(`Appointment "${title}" created.`, { appointment_id: appt.id });
@@ -1175,23 +1080,22 @@
     function linkLabel(link) {
       if (!link) return "—";
       const { type, id } = link;
-
       if (type === 'contact') {
         const c = state.contacts.find(x => x.id === id);
-        return c ? `Contact: ${c.name}` : '(Deleted contact)';
+        return c ? `Contact: ${c.name}` : 'Contact';
       }
       if (type === 'investor') {
         const inv = state.investors.find(x => x.id === id);
         const c = inv ? state.contacts.find(x => x.id === inv.contact_id) : null;
-        return c ? `Investor: ${c.name}` : '(Deleted investor)';
+        return c ? `Investor: ${c.name}` : 'Investor';
       }
       if (type === 'deal') {
         const d = state.deals.find(x => x.id === id);
-        return d ? `Deal: ${d.name}` : '(Deleted deal)';
+        return d ? `Deal: ${d.name}` : 'Deal';
       }
       if (type === 'project') {
         const p = state.projects.find(x => x.id === id);
-        return p ? `Project: ${p.name}` : '(Deleted project)';
+        return p ? `Project: ${p.name}` : 'Project';
       }
       return type;
     }
@@ -1243,7 +1147,6 @@
     function renderDashboard() {
       const { tasksOverdue, apptsToday, followupsDue, noTouch30 } = compute();
 
-      // Overdue
       document.getElementById('dashOverdueCount').textContent = tasksOverdue.length;
       const od = document.getElementById('dashOverdueList');
       if (!tasksOverdue.length) {
@@ -1261,7 +1164,6 @@
         `).join('');
       }
 
-      // Today's appointments
       document.getElementById('dashTodayApptCount').textContent = apptsToday.length;
       const ap = document.getElementById('dashTodayApptList');
       if (!apptsToday.length) {
@@ -1279,7 +1181,6 @@
         `).join('');
       }
 
-      // Follow-ups due
       document.getElementById('dashFollowupCount').textContent = followupsDue.length;
       const fu = document.getElementById('dashFollowupList');
       if (!followupsDue.length) {
@@ -1302,7 +1203,6 @@
         `).join('');
       }
 
-      // Pipeline: deals by stage
       const dealsByStage = {};
       state.deals.forEach(d => { dealsByStage[d.stage] = (dealsByStage[d.stage] || 0) + 1; });
       const dealsTotal = state.deals.length || 1;
@@ -1327,7 +1227,6 @@
         }).join('');
       }
 
-      // Investors by stage
       const investorsByStage = {};
       state.investors.forEach(i => { investorsByStage[i.stage] = (investorsByStage[i.stage] || 0) + 1; });
       const ibs = document.getElementById('dashInvestorsByStage');
@@ -1376,6 +1275,8 @@
             <td class="py-3 text-gray-600">${escapeHtml(cadence)}</td>
             <td class="py-3 text-gray-600">${escapeHtml(lastTouch)}</td>
             <td class="py-3 text-right space-x-2">
+              <button class="text-gray-700 hover:text-gray-900 text-sm font-medium"
+                      data-action="contact-edit" data-id="${c.id}">Edit</button>
               <button class="text-blue-600 hover:text-blue-800 text-sm font-medium"
                       data-action="contact-touch" data-id="${c.id}">Log Touch</button>
               <button class="text-red-600 hover:text-red-800 text-sm font-medium"
@@ -1419,6 +1320,8 @@
             <td class="py-3 text-gray-600">${escapeHtml(check)}</td>
             <td class="py-3 text-gray-600">${escapeHtml(inv.thesis || '—')}</td>
             <td class="py-3 text-right space-x-2">
+              <button class="text-gray-700 hover:text-gray-900 text-sm font-medium"
+                      data-action="investor-edit" data-id="${inv.id}">Edit</button>
               <button class="text-red-600 hover:text-red-800 text-sm font-medium"
                       data-action="investor-delete" data-id="${inv.id}">Delete</button>
             </td>
@@ -1446,24 +1349,19 @@
 
       tbody.innerHTML = filtered.map(d => {
         const type = getEnum('dealTypes', d.type)?.label || d.type;
+        const stage = stageBadge('dealStages', d.stage);
         const close = d.close_target_date ? formatDateShort(d.close_target_date) : "—";
-
-        const stageOptions = ENUMS.dealStages.map(s =>
-          `<option value="${s.key}" ${s.key === d.stage ? 'selected' : ''}>${escapeHtml(s.label)}</option>`
-        ).join('');
-
         return `
           <tr class="border-b border-gray-100 hover:bg-gray-50">
             <td class="py-3 font-medium">${escapeHtml(d.name)}</td>
             <td class="py-3">${escapeHtml(type)}</td>
-            <td class="py-3">
-              <select class="border border-gray-300 rounded-lg px-2 py-1 focus-ring"
-                      data-action="deal-set-stage" data-id="${d.id}">
-                ${stageOptions}
-              </select>
-            </td>
+            <td class="py-3">${stage}</td>
             <td class="py-3 text-gray-600">${escapeHtml(close)}</td>
             <td class="py-3 text-right space-x-2">
+              <button class="text-gray-700 hover:text-gray-900 text-sm font-medium"
+                      data-action="deal-edit" data-id="${d.id}">Edit</button>
+              <button class="text-blue-600 hover:text-blue-800 text-sm font-medium"
+                      data-action="deal-advance" data-id="${d.id}">Advance Stage</button>
               <button class="text-red-600 hover:text-red-800 text-sm font-medium"
                       data-action="deal-delete" data-id="${d.id}">Delete</button>
             </td>
@@ -1506,6 +1404,8 @@
               </div>
               <div class="flex items-center gap-2">
                 <span class="inline-block px-2 py-1 text-xs font-medium bg-blue-100 text-blue-800 rounded">${escapeHtml(status)}</span>
+                <button class="text-gray-700 hover:text-gray-900 text-sm font-medium"
+                        data-action="project-edit" data-id="${p.id}">Edit</button>
                 <button class="text-red-600 hover:text-red-800 text-sm font-medium"
                         data-action="project-delete" data-id="${p.id}">Delete</button>
               </div>
@@ -1578,6 +1478,8 @@
             <td class="py-3">${status}</td>
             <td class="py-3 text-gray-600">${escapeHtml(linkLabel(t.link))}</td>
             <td class="py-3 text-right space-x-2">
+              <button class="text-gray-700 hover:text-gray-900 text-sm font-medium"
+                      data-action="task-edit" data-id="${t.id}">Edit</button>
               ${t.completed ? '' : `
                 <button class="text-blue-600 hover:text-blue-800 text-sm font-medium"
                         data-action="task-complete" data-id="${t.id}">Complete</button>
@@ -1615,6 +1517,8 @@
             ${a.notes ? `<p class="text-sm text-gray-700 mt-2">${escapeHtml(a.notes)}</p>` : ''}
           </div>
           <div class="text-right space-x-2">
+            <button class="text-gray-700 hover:text-gray-900 text-sm font-medium"
+                    data-action="appointment-edit" data-id="${a.id}">Edit</button>
             <button class="text-red-600 hover:text-red-800 text-sm font-medium"
                     data-action="appointment-delete" data-id="${a.id}">Delete</button>
           </div>
@@ -1658,7 +1562,7 @@
       document.getElementById('searchQuery').textContent = query || "";
 
       const results = [];
-      const push = (kind, title, subtitle, navView) => results.push({ kind, title, subtitle, navView });
+      const push = (kind, title, subtitle, navView) => { results.push({ kind, title, subtitle, navView }); };
 
       state.contacts.forEach(c => {
         const hay = `${c.name} ${c.organization||""} ${c.email||""} ${c.phone||""} ${c.notes||""}`.toLowerCase();
@@ -1754,6 +1658,16 @@
     const addType = document.getElementById('addType');
     const formError = document.getElementById('formError');
 
+    let modalMode = 'create'; // 'create' | 'edit'
+    let editing = { type: null, id: null };
+
+    function setModalMode(mode, type, id=null) {
+      modalMode = mode;
+      editing = { type: type || null, id: id || null };
+      const submitBtn = document.getElementById('submitQuickAdd');
+      submitBtn.textContent = (mode === 'edit') ? 'Save' : 'Add';
+    }
+
     const formMap = {
       contact: document.getElementById('formContact'),
       investor: document.getElementById('formInvestor'),
@@ -1762,31 +1676,6 @@
       task: document.getElementById('formTask'),
       appointment: document.getElementById('formAppointment')
     };
-
-    function showForm(type) {
-      Object.values(formMap).forEach(el => el.classList.add('hidden'));
-      formMap[type].classList.remove('hidden');
-      addType.value = type;
-      formError.classList.add('hidden');
-      formError.textContent = "";
-      document.getElementById('quickAddTitle').textContent = `Quick Add: ${type.charAt(0).toUpperCase() + type.slice(1)}`;
-
-      populateFormSelects(type);
-
-      setTimeout(() => {
-        const first = formMap[type].querySelector('input, select, textarea');
-        if (first) first.focus();
-      }, 0);
-    }
-
-    function openModal(type='contact') {
-      modal.classList.remove('hidden');
-      showForm(type);
-    }
-
-    function closeModal() {
-      modal.classList.add('hidden');
-    }
 
     function setFormError(msg) {
       formError.textContent = msg;
@@ -1816,6 +1705,153 @@
       return data;
     }
 
+    function setFormValues(formEl, values) {
+      formEl.querySelectorAll('input, select, textarea').forEach(el => {
+        if (!el.name) return;
+        if (!(el.name in values)) return;
+
+        if (el.type === 'datetime-local') {
+          const d = parseMaybeDate(values[el.name]);
+          el.value = d ? toLocalDateTimeInputValue(d) : '';
+          return;
+        }
+        if (el.type === 'date') {
+          const d = parseMaybeDate(values[el.name]);
+          el.value = d
+            ? `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
+            : '';
+          return;
+        }
+
+        el.value = values[el.name] ?? '';
+      });
+    }
+
+    function showForm(type) {
+      Object.values(formMap).forEach(el => el.classList.add('hidden'));
+      formMap[type].classList.remove('hidden');
+      addType.value = type;
+      formError.classList.add('hidden');
+      formError.textContent = "";
+      document.getElementById('quickAddTitle').textContent = `${modalMode === 'edit' ? 'Edit' : 'Quick Add'}: ${type.charAt(0).toUpperCase() + type.slice(1)}`;
+
+      populateFormSelects(type);
+
+      setTimeout(() => {
+        const first = formMap[type].querySelector('input, select, textarea');
+        if (first) first.focus();
+      }, 0);
+    }
+
+    function openModal(type='contact') {
+      modal.classList.remove('hidden');
+      setModalMode('create', type, null);
+      showForm(type);
+    }
+
+    function closeModal() {
+      modal.classList.add('hidden');
+      setModalMode('create', 'contact', null);
+    }
+
+    function openEditModal(type, id) {
+      const kind = kindForType(type);
+      const record = kind ? findById(kind, id) : null;
+      if (!record) return;
+
+      modal.classList.remove('hidden');
+      setModalMode('edit', type, id);
+      showForm(type);
+
+      if (type === 'contact') {
+        setFormValues(formMap.contact, {
+          fullName: record.name,
+          email: record.email || '',
+          phone: record.phone || '',
+          organization: record.organization || '',
+          stage: record.stage || 'warm',
+          cadenceDays: record.cadence_days || 0,
+          notes: record.notes || ''
+        });
+      }
+
+      if (type === 'investor') {
+        setFormValues(formMap.investor, {
+          contactId: record.contact_id,
+          investorType: record.type,
+          investorStage: record.stage,
+          checkMin: record.check_min ?? '',
+          checkMax: record.check_max ?? '',
+          thesis: record.thesis || '',
+          preferences: record.preferences || ''
+        });
+      }
+
+      if (type === 'deal') {
+        setFormValues(formMap.deal, {
+          dealName: record.name,
+          dealType: record.type,
+          dealStage: record.stage,
+          targetClose: record.close_target_date,
+          amount: record.amount ?? '',
+          dealNotes: record.notes || ''
+        });
+      }
+
+      if (type === 'project') {
+        setFormValues(formMap.project, {
+          projectName: record.name,
+          projectType: record.type,
+          projectStatus: record.status,
+          targetDate: record.target_date,
+          projectNotes: record.notes || ''
+        });
+      }
+
+      if (type === 'task') {
+        setFormValues(formMap.task, {
+          taskTitle: record.title,
+          taskDesc: record.description || '',
+          taskDue: record.due_at,
+          linkType: record.link?.type || '',
+        });
+
+        const linkIdEl = formMap.task.querySelector('[name="linkId"]');
+        const lt = record.link?.type || '';
+        if (lt) {
+          populateLinkIdSelect(linkIdEl, lt);
+          linkIdEl.classList.remove('hidden');
+          linkIdEl.value = record.link?.id || '';
+        } else {
+          linkIdEl.classList.add('hidden');
+        }
+      }
+
+      if (type === 'appointment') {
+        setFormValues(formMap.appointment, {
+          apptTitle: record.title,
+          startAt: record.start_at,
+          endAt: record.end_at,
+          location: record.location || '',
+          apptNotes: record.notes || '',
+          apptLinkType: record.link?.type || '',
+        });
+
+        const lt = record.link?.type || '';
+        const apptLinkIdEl = formMap.appointment.querySelector('[name="apptLinkId"]');
+        if (lt) {
+          populateLinkIdSelect(apptLinkIdEl, lt === 'investor' ? 'investor' : lt);
+          apptLinkIdEl.classList.remove('hidden');
+          apptLinkIdEl.value = record.link?.id || '';
+        } else {
+          apptLinkIdEl.classList.add('hidden');
+        }
+      }
+
+      // Update title
+      document.getElementById('quickAddTitle').textContent = `Edit: ${type.charAt(0).toUpperCase() + type.slice(1)}`;
+    }
+
     // ---------- Populate selects ----------
     function setOptions(selectEl, options, placeholder=null) {
       selectEl.innerHTML = "";
@@ -1836,7 +1872,7 @@
     function populateFormSelects(type) {
       const contactStageSel = formMap.contact.querySelector('[name="stage"]');
       setOptions(contactStageSel, ENUMS.relationshipStages.map(s => ({ value:s.key, label:s.label })));
-      contactStageSel.value = 'warm';
+      if (!contactStageSel.value) contactStageSel.value = 'warm';
 
       const invContactSel = formMap.investor.querySelector('[name="contactId"]');
       setOptions(invContactSel,
@@ -1846,27 +1882,27 @@
 
       const invTypeSel = formMap.investor.querySelector('[name="investorType"]');
       setOptions(invTypeSel, ENUMS.investorTypes.map(s => ({ value:s.key, label:s.label })));
-      invTypeSel.value = 'hnwi';
+      if (!invTypeSel.value) invTypeSel.value = 'hnwi';
 
       const invStageSel = formMap.investor.querySelector('[name="investorStage"]');
       setOptions(invStageSel, ENUMS.investorStages.map(s => ({ value:s.key, label:s.label })));
-      invStageSel.value = 'prospect';
+      if (!invStageSel.value) invStageSel.value = 'prospect';
 
       const dealTypeSel = formMap.deal.querySelector('[name="dealType"]');
       setOptions(dealTypeSel, ENUMS.dealTypes.map(s => ({ value:s.key, label:s.label })));
-      dealTypeSel.value = 'multifamily';
+      if (!dealTypeSel.value) dealTypeSel.value = 'multifamily';
 
       const dealStageSel = formMap.deal.querySelector('[name="dealStage"]');
       setOptions(dealStageSel, ENUMS.dealStages.map(s => ({ value:s.key, label:s.label })));
-      dealStageSel.value = 'sourced';
+      if (!dealStageSel.value) dealStageSel.value = 'sourced';
 
       const projTypeSel = formMap.project.querySelector('[name="projectType"]');
       setOptions(projTypeSel, ENUMS.projectTypes.map(s => ({ value:s.key, label:s.label })));
-      projTypeSel.value = 'llc_setup';
+      if (!projTypeSel.value) projTypeSel.value = 'llc_setup';
 
       const projStatusSel = formMap.project.querySelector('[name="projectStatus"]');
       setOptions(projStatusSel, ENUMS.projectStatuses.map(s => ({ value:s.key, label:s.label })));
-      projStatusSel.value = 'planning';
+      if (!projStatusSel.value) projStatusSel.value = 'planning';
 
       const linkIdSel = formMap.task.querySelector('[name="linkId"]');
       linkIdSel.classList.add('hidden');
@@ -1876,17 +1912,20 @@
       apptLinkIdSel.classList.add('hidden');
       setOptions(apptLinkIdSel, [], "Select item");
 
-      const now = new Date();
-      const inHour = new Date(now.getTime() + 60*60*1000);
-      const in90 = new Date(now.getTime() + 90*60*1000);
+      // Default date-times only in create mode
+      if (modalMode === 'create') {
+        const now = new Date();
+        const inHour = new Date(now.getTime() + 60*60*1000);
+        const in90 = new Date(now.getTime() + 90*60*1000);
 
-      const taskDue = formMap.task.querySelector('[name="taskDue"]');
-      if (taskDue) taskDue.value = toLocalDateTimeInputValue(inHour);
+        const taskDue = formMap.task.querySelector('[name="taskDue"]');
+        if (taskDue) taskDue.value = toLocalDateTimeInputValue(inHour);
 
-      const startAt = formMap.appointment.querySelector('[name="startAt"]');
-      const endAt = formMap.appointment.querySelector('[name="endAt"]');
-      if (startAt) startAt.value = toLocalDateTimeInputValue(inHour);
-      if (endAt) endAt.value = toLocalDateTimeInputValue(in90);
+        const startAt = formMap.appointment.querySelector('[name="startAt"]');
+        const endAt = formMap.appointment.querySelector('[name="endAt"]');
+        if (startAt) startAt.value = toLocalDateTimeInputValue(inHour);
+        if (endAt) endAt.value = toLocalDateTimeInputValue(in90);
+      }
     }
 
     function populateLinkIdSelect(selectEl, type) {
@@ -1904,7 +1943,7 @@
       selectEl.classList.toggle('hidden', !items.length);
     }
 
-    // ---------- CRUD Actions ----------
+    // ---------- CRUD ----------
     function createContact({ name, email="", phone="", organization="", stage="warm", cadence_days=0, notes="" }) {
       const c = {
         id: uid('c'),
@@ -1952,14 +1991,13 @@
         name,
         type,
         stage,
-        close_target_date: toIsoOrNull(close_target_date),
+        close_target_date: close_target_date ? new Date(close_target_date).toISOString() : null,
         amount: amount ? Number(amount) : null,
         notes,
         created_at: nowIso()
       };
       state.deals.unshift(d);
       addActivity(`Deal created: ${name}`, { deal_id: d.id });
-
       if (stage === 'due_diligence') generateDDChecklist(d);
       return d;
     }
@@ -1970,15 +2008,76 @@
         name,
         type,
         status,
-        target_date: toIsoOrNull(target_date),
+        target_date: target_date ? new Date(target_date).toISOString() : null,
         notes,
         created_at: nowIso()
       };
       state.projects.unshift(p);
       addActivity(`Project created: ${name}`, { project_id: p.id });
-
       generateProjectTemplateTasks(p);
       return p;
+    }
+
+    // --- Update functions ---
+    function updateContact(id, patch) {
+      const c = findById('contacts', id);
+      if (!c) return false;
+      Object.assign(c, patch);
+      c.cadence_days = clampInt(c.cadence_days, 0);
+      if (c.cadence_days) ensureCadence(c);
+      else c.next_touch_due_at = null;
+      addActivity(`Contact updated: ${c.name}`, { contact_id: c.id });
+      return true;
+    }
+
+    function updateInvestor(id, patch) {
+      const inv = findById('investors', id);
+      if (!inv) return false;
+      Object.assign(inv, patch);
+      inv.check_min = (inv.check_min === '' || inv.check_min === null) ? null : Number(inv.check_min);
+      inv.check_max = (inv.check_max === '' || inv.check_max === null) ? null : Number(inv.check_max);
+      addActivity(`Investor updated.`, { investor_id: inv.id });
+      return true;
+    }
+
+    function updateDeal(id, patch) {
+      const d = findById('deals', id);
+      if (!d) return false;
+      const prevStage = d.stage;
+      Object.assign(d, patch);
+      d.close_target_date = d.close_target_date ? new Date(d.close_target_date).toISOString() : null;
+      d.amount = (d.amount === '' || d.amount === null) ? null : Number(d.amount);
+      addActivity(`Deal updated: ${d.name}`, { deal_id: d.id });
+      if (prevStage !== 'due_diligence' && d.stage === 'due_diligence') generateDDChecklist(d);
+      return true;
+    }
+
+    function updateProject(id, patch) {
+      const p = findById('projects', id);
+      if (!p) return false;
+      Object.assign(p, patch);
+      p.target_date = p.target_date ? new Date(p.target_date).toISOString() : null;
+      addActivity(`Project updated: ${p.name}`, { project_id: p.id });
+      return true;
+    }
+
+    function updateTask(id, patch) {
+      const t = findById('tasks', id);
+      if (!t) return false;
+      Object.assign(t, patch);
+      t.due_at = t.due_at ? new Date(t.due_at).toISOString() : null;
+      addActivity(`Task updated: ${t.title}`, { task_id: t.id });
+      return true;
+    }
+
+    function updateAppointment(id, patch) {
+      const a = findById('appointments', id);
+      if (!a) return false;
+      Object.assign(a, patch);
+      a.start_at = a.start_at ? new Date(a.start_at).toISOString() : null;
+      a.end_at = a.end_at ? new Date(a.end_at).toISOString() : null;
+      addActivity(`Appointment updated: ${a.title}`, { appointment_id: a.id });
+      return true;
     }
 
     function logContactTouch(contactId) {
@@ -1999,30 +2098,41 @@
       showNotification('Task marked complete', 'success');
     }
 
-    function unlinkTasks(linkType, linkId) {
-      state.tasks.forEach(t => {
-        if (t.link && t.link.type === linkType && t.link.id === linkId) {
-          t.link = null;
-        }
-      });
-    }
-
     function deleteById(kind, id) {
       const arr = state[kind];
       const idx = arr.findIndex(x => x.id === id);
       if (idx === -1) return false;
       const removed = arr.splice(idx, 1)[0];
 
-      // v1.1 behavior: keep tasks (audit trail), but unlink
       if (kind === 'contacts') {
         state.investors = state.investors.filter(inv => inv.contact_id !== id);
-        unlinkTasks('contact', id);
+        state.tasks = state.tasks.filter(t => !(t.link && t.link.type === 'contact' && t.link.id === id));
       }
-      if (kind === 'deals') unlinkTasks('deal', id);
-      if (kind === 'projects') unlinkTasks('project', id);
+      if (kind === 'deals') {
+        state.tasks = state.tasks.filter(t => !(t.link && t.link.type === 'deal' && t.link.id === id));
+      }
+      if (kind === 'projects') {
+        state.tasks = state.tasks.filter(t => !(t.link && t.link.type === 'project' && t.link.id === id));
+      }
 
       addActivity(`${kind.slice(0,-1)} deleted: ${removed?.name || removed?.title || removed?.id || id}`, { kind, id });
       return true;
+    }
+
+    function advanceDealStage(dealId) {
+      const d = state.deals.find(x => x.id === dealId);
+      if (!d) return;
+
+      const stages = ENUMS.dealStages.map(s => s.key);
+      const idx = stages.indexOf(d.stage);
+      const next = stages[Math.min(idx + 1, stages.length - 1)];
+      if (next === d.stage) return;
+
+      d.stage = next;
+      addActivity(`Deal "${d.name}" advanced to ${getEnum('dealStages', next)?.label || next}.`, { deal_id: d.id });
+
+      if (next === 'due_diligence') generateDDChecklist(d);
+      showNotification(`Deal advanced to ${getEnum('dealStages', next)?.label || next}`, 'success');
     }
 
     // ---------- Export ----------
@@ -2037,46 +2147,6 @@
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
-    }
-
-    function exportFullBackup() {
-      const blob = new Blob([JSON.stringify(state, null, 2)], { type: "application/json" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `dealflowpro_backup_${new Date().toISOString().slice(0,10)}.json`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-    }
-
-    function importFullBackupFile(file) {
-      const reader = new FileReader();
-      reader.onload = () => {
-        try {
-          const parsed = JSON.parse(reader.result);
-          const migrated = migrateState(parsed);
-
-          state.meta = migrated.meta;
-          state.contacts = migrated.contacts;
-          state.investors = migrated.investors;
-          state.deals = migrated.deals;
-          state.projects = migrated.projects;
-          state.tasks = migrated.tasks;
-          state.appointments = migrated.appointments;
-          state.activities = migrated.activities;
-
-          saveState();
-          renderAll();
-          setView('dashboard');
-          showNotification('Backup imported.', 'success');
-        } catch (e) {
-          console.error(e);
-          showNotification('Import failed: invalid backup file.', 'error');
-        }
-      };
-      reader.readAsText(file);
     }
 
     // ---------- Demo Data ----------
@@ -2124,14 +2194,7 @@
     }
 
     function deleteAllData() {
-      state.meta = { version: CURRENT_VERSION, last_migrated_at: null };
-      state.contacts = [];
-      state.investors = [];
-      state.deals = [];
-      state.projects = [];
-      state.tasks = [];
-      state.appointments = [];
-      state.activities = [];
+      for (const k of Object.keys(state)) state[k] = [];
       localStorage.removeItem(STORAGE_KEY);
       showNotification('All data deleted.', 'success');
       renderAll();
@@ -2167,6 +2230,14 @@
       const action = actionEl.dataset.action;
       const id = actionEl.dataset.id;
 
+      // Edit actions
+      if (action === 'contact-edit') { openEditModal('contact', id); return; }
+      if (action === 'investor-edit') { openEditModal('investor', id); return; }
+      if (action === 'deal-edit') { openEditModal('deal', id); return; }
+      if (action === 'project-edit') { openEditModal('project', id); return; }
+      if (action === 'task-edit') { openEditModal('task', id); return; }
+      if (action === 'appointment-edit') { openEditModal('appointment', id); return; }
+
       if (action === 'task-complete') {
         completeTask(id);
         saveState();
@@ -2188,7 +2259,7 @@
         return;
       }
       if (action === 'contact-delete') {
-        if (confirm('Delete this contact (investor profiles removed; tasks kept but unlinked)?')) {
+        if (confirm('Delete this contact (and linked investor profile + linked tasks)?')) {
           deleteById('contacts', id);
           saveState();
           renderAll();
@@ -2204,15 +2275,21 @@
         return;
       }
       if (action === 'deal-delete') {
-        if (confirm('Delete this deal (tasks kept but unlinked)?')) {
+        if (confirm('Delete this deal (and linked tasks)?')) {
           deleteById('deals', id);
           saveState();
           renderAll();
         }
         return;
       }
+      if (action === 'deal-advance') {
+        advanceDealStage(id);
+        saveState();
+        renderAll();
+        return;
+      }
       if (action === 'project-delete') {
-        if (confirm('Delete this project (tasks kept but unlinked)?')) {
+        if (confirm('Delete this project (and linked tasks)?')) {
           deleteById('projects', id);
           saveState();
           renderAll();
@@ -2255,48 +2332,6 @@
         }
         return;
       }
-      if (action === 'export-backup') {
-        exportFullBackup();
-        return;
-      }
-      if (action === 'import-backup') {
-        document.getElementById('backupFile').click();
-        return;
-      }
-    });
-
-    // Deal stage dropdown change (delegated)
-    document.addEventListener('change', (e) => {
-      const el = e.target.closest('[data-action="deal-set-stage"]');
-      if (!el) return;
-
-      const dealId = el.dataset.id;
-      const next = el.value;
-
-      const d = state.deals.find(x => x.id === dealId);
-      if (!d) return;
-
-      const prev = d.stage;
-      if (prev === next) return;
-
-      d.stage = next;
-      addActivity(`Deal "${d.name}" stage changed from ${getEnum('dealStages', prev)?.label || prev} to ${getEnum('dealStages', next)?.label || next}.`, { deal_id: d.id });
-
-      if (next === 'due_diligence') generateDDChecklist(d);
-
-      saveState();
-      renderAll();
-      showNotification('Deal stage updated.', 'success');
-    });
-
-    // Backup file import
-    document.getElementById('backupFile').addEventListener('change', (e) => {
-      const file = e.target.files && e.target.files[0];
-      if (!file) return;
-      if (confirm('Importing a backup will replace your current local data. Continue?')) {
-        importFullBackupFile(file);
-      }
-      e.target.value = '';
     });
 
     // ---------- Filters / search inputs ----------
@@ -2316,31 +2351,12 @@
 
     document.getElementById('tasksFilter').addEventListener('change', renderTasks);
 
-    // Global search: debounce and Escape clears
-    let searchTimer = null;
-    const globalSearch = document.getElementById('globalSearch');
-
-    globalSearch.addEventListener('input', (e) => {
+    document.getElementById('globalSearch').addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter') return;
       const q = e.target.value || "";
-      clearTimeout(searchTimer);
-      searchTimer = setTimeout(() => {
-        if (!q.trim()) return;
-        renderSearch(q);
-        setView('search');
-      }, 300);
-    });
-
-    globalSearch.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') {
-        const q = e.target.value || "";
-        if (!q.trim()) return;
-        renderSearch(q);
-        setView('search');
-      }
-      if (e.key === 'Escape') {
-        e.target.value = '';
-        setView('dashboard');
-      }
+      if (!q.trim()) return;
+      renderSearch(q);
+      setView('search');
     });
 
     // ---------- Modal events ----------
@@ -2348,9 +2364,12 @@
     window.addEventListener('click', (event) => { if (event.target === modal) closeModal(); });
     window.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !modal.classList.contains('hidden')) closeModal(); });
 
-    addType.addEventListener('change', (e) => showForm(e.target.value));
+    addType.addEventListener('change', (e) => {
+      // Changing types resets edit mode for safety
+      setModalMode('create', e.target.value, null);
+      showForm(e.target.value);
+    });
 
-    // Dependent link selects
     const taskLinkType = formMap.task.querySelector('[name="linkType"]');
     const taskLinkId = formMap.task.querySelector('[name="linkId"]');
     taskLinkType.addEventListener('change', () => {
@@ -2367,19 +2386,36 @@
       populateLinkIdSelect(apptLinkId, t === 'investor' ? 'investor' : t);
     });
 
-    // Seed Demo button
+    // Appointment end sync behavior
+    const apptStartEl = formMap.appointment.querySelector('[name="startAt"]');
+    const apptEndEl = formMap.appointment.querySelector('[name="endAt"]');
+
+    function syncAppointmentEndFromStart(force=false) {
+      const s = parseMaybeDate(apptStartEl.value);
+      const e = parseMaybeDate(apptEndEl.value);
+      if (!s) return;
+
+      if (force || !e || isNaN(e.getTime()) || e <= s) {
+        const newEnd = new Date(s.getTime() + 90*60*1000);
+        apptEndEl.value = toLocalDateTimeInputValue(newEnd);
+      }
+    }
+
+    apptStartEl.addEventListener('change', () => syncAppointmentEndFromStart(false));
+    apptEndEl.addEventListener('change', () => syncAppointmentEndFromStart(false));
+
     document.getElementById('seedDemo').addEventListener('click', () => seedDemoData());
 
-    // Delete all
     document.getElementById('deleteAll').addEventListener('click', () => {
       if (confirm('Delete ALL CRM data stored in this browser?')) deleteAllData();
     });
 
-    // Submit quick add
+    // ---------- Submit create/edit ----------
     document.getElementById('submitQuickAdd').addEventListener('click', () => {
       const type = addType.value;
       const formEl = formMap[type];
       const data = readFormValues(formEl);
+      const isEdit = (modalMode === 'edit' && editing.type === type && editing.id);
 
       try {
         if (type === 'contact') {
@@ -2388,7 +2424,7 @@
           const cadence = clampInt(data.cadenceDays, 0);
           const stage = data.stage || 'warm';
 
-          createContact({
+          const patch = {
             name,
             email: (data.email||"").trim(),
             phone: (data.phone||"").trim(),
@@ -2396,16 +2432,23 @@
             stage,
             cadence_days: cadence,
             notes: (data.notes||"").trim()
-          });
+          };
 
-          showNotification('Contact added.', 'success');
+          if (!isEdit) {
+            createContact(patch);
+            showNotification('Contact added.', 'success');
+          } else {
+            updateContact(editing.id, patch);
+            showNotification('Contact updated.', 'success');
+          }
         }
 
         if (type === 'investor') {
           if (!state.contacts.length) return setFormError('Create a Contact first, then create an Investor profile.');
           const contactId = data.contactId;
           if (!contactId) return setFormError('Select a Contact.');
-          createInvestor({
+
+          const patch = {
             contact_id: contactId,
             type: data.investorType || 'hnwi',
             stage: data.investorStage || 'prospect',
@@ -2413,39 +2456,61 @@
             check_max: data.checkMax || null,
             thesis: (data.thesis||"").trim(),
             preferences: (data.preferences||"").trim()
-          });
-          showNotification('Investor added.', 'success');
+          };
+
+          if (!isEdit) {
+            createInvestor(patch);
+            showNotification('Investor added.', 'success');
+          } else {
+            updateInvestor(editing.id, patch);
+            showNotification('Investor updated.', 'success');
+          }
         }
 
         if (type === 'deal') {
           const name = (data.dealName || "").trim();
           if (!name) return setFormError('Deal Name is required.');
           const stage = data.dealStage || 'sourced';
-          const close = data.targetClose ? data.targetClose : null; // date-only
-          createDeal({
+          const close = data.targetClose ? new Date(data.targetClose) : null;
+
+          const patch = {
             name,
             type: data.dealType || 'multifamily',
             stage,
-            close_target_date: close,
+            close_target_date: close ? close.toISOString() : null,
             amount: data.amount || null,
             notes: (data.dealNotes||"").trim()
-          });
-          showNotification('Deal added.', 'success');
+          };
+
+          if (!isEdit) {
+            createDeal(patch);
+            showNotification('Deal added.', 'success');
+          } else {
+            updateDeal(editing.id, patch);
+            showNotification('Deal updated.', 'success');
+          }
         }
 
         if (type === 'project') {
           const name = (data.projectName || "").trim();
           if (!name) return setFormError('Project Name is required.');
-          const target = data.targetDate ? data.targetDate : null; // date-only
+          const target = data.targetDate ? new Date(data.targetDate) : null;
 
-          createProject({
+          const patch = {
             name,
             type: data.projectType || 'other',
             status: data.projectStatus || 'planning',
-            target_date: target,
+            target_date: target ? target.toISOString() : null,
             notes: (data.projectNotes||"").trim()
-          });
-          showNotification('Project added.', 'success');
+          };
+
+          if (!isEdit) {
+            createProject(patch);
+            showNotification('Project added.', 'success');
+          } else {
+            updateProject(editing.id, patch);
+            showNotification('Project updated.', 'success');
+          }
         }
 
         if (type === 'task') {
@@ -2460,25 +2525,39 @@
             if (id) link = { type: lt, id };
           }
 
-          createTask({
+          const patch = {
             title,
             description: (data.taskDesc||"").trim(),
             due_at: due ? due.toISOString() : null,
             link
-          });
+          };
 
-          addActivity(`Task created: ${title}`, {});
-          showNotification('Task added.', 'success');
+          if (!isEdit) {
+            createTask(patch);
+            addActivity(`Task created: ${title}`, {});
+            showNotification('Task added.', 'success');
+          } else {
+            updateTask(editing.id, patch);
+            showNotification('Task updated.', 'success');
+          }
         }
 
         if (type === 'appointment') {
           const title = (data.apptTitle || "").trim();
           if (!title) return setFormError('Appointment Title is required.');
+
           const start = parseMaybeDate(data.startAt);
           const end = parseMaybeDate(data.endAt);
+
           if (!start) return setFormError('Start time is required.');
           if (!end) return setFormError('End time is required.');
-          if (end <= start) return setFormError('End time must be after start time.');
+
+          // Enforce end > start (auto-fix if needed)
+          if (end <= start) {
+            const bumped = new Date(start.getTime() + 90*60*1000);
+            setFormValues(formMap.appointment, { endAt: bumped.toISOString() });
+            return setFormError('End time must be after start time (adjusted to +90 minutes).');
+          }
 
           let link = null;
           const lt = data.apptLinkType || "";
@@ -2487,16 +2566,22 @@
             if (id) link = { type: lt, id };
           }
 
-          createAppointment({
+          const patch = {
             title,
             start_at: start.toISOString(),
             end_at: end.toISOString(),
             location: (data.location||"").trim(),
             notes: (data.apptNotes||"").trim(),
             link
-          });
+          };
 
-          showNotification('Appointment added.', 'success');
+          if (!isEdit) {
+            createAppointment(patch);
+            showNotification('Appointment added.', 'success');
+          } else {
+            updateAppointment(editing.id, patch);
+            showNotification('Appointment updated.', 'success');
+          }
         }
 
         saveState();
@@ -2513,12 +2598,7 @@
     // ---------- Init ----------
     function init() {
       const ok = loadState();
-      if (!ok) {
-        saveState();
-      } else {
-        // if migration occurred, re-save normalized data
-        saveState();
-      }
+      if (!ok) saveState();
 
       populateFormSelects('contact');
       renderAll();
@@ -2528,7 +2608,7 @@
         showNotification('Tip: Click "Seed Demo Data" in Quick Add modal.', 'info');
       }
 
-      console.log('DealFlow Pro v1.1 loaded. Data stored in localStorage key:', STORAGE_KEY);
+      console.log('DealFlow Pro v1 loaded. Data stored in localStorage key:', STORAGE_KEY);
     }
 
     init();
