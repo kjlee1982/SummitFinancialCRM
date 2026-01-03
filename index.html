@@ -77,7 +77,7 @@
         <h1 class="text-2xl font-bold text-white flex items-center">
           <i class="fas fa-chart-network mr-2"></i> DealFlow Pro
         </h1>
-        <p class="text-sm text-gray-400 mt-1">CRM v1.4.6 (cloud sync)</p>
+        <p id="appVersion" class="text-sm text-gray-400 mt-1">CRM</p>
       </div>
 
       <nav class="flex-1 px-4">
@@ -870,8 +870,16 @@
 
 <script>
   // Boot marker
-  window.__DEALFLOW_VERSION__ = "1.5.4";
-  console.log("DealFlow Pro boot OK v1.5.4 (summitcrm)");
+  window.__DEALFLOW_VERSION__ = "1.5.5";
+  console.log("DealFlow Pro boot OK v1.5.5 (summitcrm)");
+
+  // Sync sidebar/app version label
+  try {
+    const v = window.__DEALFLOW_VERSION__ ? `v${window.__DEALFLOW_VERSION__}` : "";
+    const el = document.getElementById("appVersion");
+    if (el) el.textContent = `CRM ${v} (cloud sync)`;
+  } catch (_) {}
+
 
     /*****************************************************************
      * Working v1 CRM - Single-file, localStorage persistence.
@@ -1075,9 +1083,23 @@
       saveMeta(meta);
     }
 
-    function saveState() {
+    async function cloudSaveNow() {
+      if (!isSignedIn || !window.firebaseCRM?.cloudSave) return;
+      try {
+        await window.firebaseCRM.cloudSave(state);
+      } catch (e) {
+        console.warn('Cloud save failed:', e);
+      }
+    }
+
+    function saveState(flush=false) {
       saveStateLocalOnly();
-      cloudSaveDebounced();
+      if (flush) {
+        // Best effort immediate write for user-triggered creates/edits.
+        cloudSaveNow();
+      } else {
+        cloudSaveDebounced();
+      }
     }
 
     function addActivity(text, meta={}) {
@@ -1243,9 +1265,46 @@
 
     // ---------- Rendering ----------
     function setView(view) {
+      currentView = view;
       document.querySelectorAll('[data-view]').forEach(s => s.classList.toggle('hidden', s.dataset.view !== view));
       document.querySelectorAll('[data-nav]').forEach(a => a.classList.toggle('active', a.dataset.nav === view));
+      // Mode 1: instant local rerender, optional throttled cloud pull.
+      try { renderCurrentTab(); } catch (_) { try { renderAll(); } catch (_) {} }
+      maybeCloudPull(true);
     }
+
+    let currentView = 'dashboard';
+    let lastCloudPullMs = 0;
+
+    function renderCurrentTab() {
+      switch (currentView) {
+        case 'dashboard': renderDashboard(); break;
+        case 'contacts': renderContacts(); break;
+        case 'investors': renderInvestors(); break;
+        case 'deals': renderDeals(); break;
+        case 'projects': renderProjects(); break;
+        case 'tasks': renderTasks(); break;
+        case 'calendar': renderAppointments(); break;
+        case 'activity': renderActivity(); break;
+        default: renderAll(); break;
+      }
+    }
+
+    async function maybeCloudPull(silent=true) {
+      if (!isSignedIn || !cloudReady) return;
+      const now = Date.now();
+      if (now - lastCloudPullMs < 60000) return; // Mode 1: throttle pulls
+      lastCloudPullMs = now;
+      try {
+        await cloudSyncPullIfAvailable({ silent });
+      } catch (e) {
+        console.warn('Cloud pull failed:', e);
+      }
+    }
+
+    // Pull when the tab regains focus (throttled)
+    window.addEventListener('focus', () => { maybeCloudPull(true); });
+
 
     function stageBadge(enumName, key) {
       const def = getEnum(enumName, key);
@@ -2003,7 +2062,8 @@
     }
 
 
-    async function cloudSyncPullIfAvailable() {
+    async function cloudSyncPullIfAvailable(opts={}) {
+      const silent = !!opts.silent;
       if (!window.firebaseCRM?.cloudLoad) return { pulled: false, cloud_ms: 0 };
       const payload = await window.firebaseCRM.cloudLoad();
       if (!payload || !payload.state) return { pulled: false, cloud_ms: 0 };
@@ -2019,10 +2079,12 @@
       // Persist locally without triggering a cloud write-back.
       saveStateLocalOnly();
       renderAll();
-      addActivity('Cloud sync: pulled data from Firestore.', { source: 'firestore' });
-      saveStateLocalOnly();
-      renderActivity();
-      showNotification('Cloud sync: data loaded.', 'success');
+      if (!silent) {
+        addActivity('Cloud sync: pulled data from Firestore.', { source: 'firestore' });
+        saveStateLocalOnly();
+        renderActivity();
+        showNotification('Cloud sync: data loaded.', 'success');
+      }
 
       return { pulled: true, cloud_ms: cloudMs };
     }
@@ -2675,7 +2737,7 @@ function handleDelegatedEvent(e) {
     if (action === 'task-delete') {
       if (confirm('Delete this task?')) {
         deleteById('tasks', id);
-        saveState();
+        saveState(true);
         renderAll();
       }
       return;
@@ -2689,7 +2751,7 @@ function handleDelegatedEvent(e) {
     if (action === 'contact-delete') {
       if (confirm('Delete this contact (and linked investor profile + linked tasks)?')) {
         deleteById('contacts', id);
-        saveState();
+        saveState(true);
         renderAll();
       }
       return;
@@ -2697,7 +2759,7 @@ function handleDelegatedEvent(e) {
     if (action === 'investor-delete') {
       if (confirm('Delete this investor profile?')) {
         deleteById('investors', id);
-        saveState();
+        saveState(true);
         renderAll();
       }
       return;
@@ -2705,7 +2767,7 @@ function handleDelegatedEvent(e) {
     if (action === 'deal-delete') {
       if (confirm('Delete this deal (and linked tasks)?')) {
         deleteById('deals', id);
-        saveState();
+        saveState(true);
         renderAll();
       }
       return;
@@ -2719,7 +2781,7 @@ function handleDelegatedEvent(e) {
     if (action === 'project-delete') {
       if (confirm('Delete this project (and linked tasks)?')) {
         deleteById('projects', id);
-        saveState();
+        saveState(true);
         renderAll();
       }
       return;
@@ -2727,7 +2789,7 @@ function handleDelegatedEvent(e) {
     if (action === 'appointment-delete') {
       if (confirm('Delete this appointment?')) {
         deleteById('appointments', id);
-        saveState();
+        saveState(true);
         renderAll();
       }
       return;
@@ -2743,7 +2805,7 @@ function handleDelegatedEvent(e) {
     if (action === 'clear-activity') {
       if (confirm('Clear all activity log entries?')) {
         state.activities = [];
-        saveState();
+        saveState(true);
         renderAll();
         showNotification('Activity cleared.', 'success');
       }
@@ -3078,7 +3140,7 @@ document.addEventListener('touchend', handleDelegatedEvent, true);
           }
         }
 
-        saveState();
+        saveState(true);
         renderAll();
         clearForm(formEl);
         closeModal();
