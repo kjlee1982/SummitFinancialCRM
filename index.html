@@ -790,7 +790,9 @@
     createUserWithEmailAndPassword,
     signOut,
     setPersistence,
-    browserLocalPersistence
+    indexedDBLocalPersistence,
+    browserLocalPersistence,
+    browserSessionPersistence
   } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-auth.js";
 
   import {
@@ -817,7 +819,9 @@
   const db = getFirestore(app);
 
   // Persist sign-in across refresh/relaunch (GitHub Pages included)
-  await setPersistence(auth, browserLocalPersistence);
+  await setPersistence(auth, indexedDBLocalPersistence,
+    browserLocalPersistence,
+    browserSessionPersistence);
 
   // One document per user (fastest cross-device sync path)
   const userDocRef = (uid) => doc(db, "users", uid, "crm", "state");
