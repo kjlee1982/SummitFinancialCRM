@@ -801,6 +801,7 @@
     serverTimestamp
   } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-firestore.js";
 
+  // Summit Financial CRM Firebase config
   const firebaseConfig = {
     apiKey: "AIzaSyBvIWKdRexJGVIp1wh22ncdJow2S0lgS7s",
     authDomain: "summit-financial-crm.firebaseapp.com",
@@ -815,23 +816,45 @@
   const auth = getAuth(app);
   const db = getFirestore(app);
 
-  // Make sign-in persist across refresh/relaunch
+  // Persist sign-in across refresh/relaunch (GitHub Pages included)
   await setPersistence(auth, browserLocalPersistence);
 
-  // Expose a small bridge (keep your existing non-module CRM script intact)
+  // One document per user (fastest cross-device sync path)
+  const userDocRef = (uid) => doc(db, "crm_users", uid);
+
+  // Bridge for the non-module CRM script below.
   window.firebaseCRM = window.firebaseCRM || {};
+
+  // Auth
   window.firebaseCRM.getUid = () => auth.currentUser?.uid ?? null;
+  window.firebaseCRM.onAuth = (cb) => onAuthStateChanged(auth, cb);
+  window.firebaseCRM.signIn = (email, pass) => signInWithEmailAndPassword(auth, email, pass);
+  window.firebaseCRM.createAccount = (email, pass) => createUserWithEmailAndPassword(auth, email, pass);
   window.firebaseCRM.signOut = () => signOut(auth);
 
-  // Optional: add these if your UI calls them
-  window.firebaseCRM.signInEmail = (email, pass) => signInWithEmailAndPassword(auth, email, pass);
-  window.firebaseCRM.signUpEmail = (email, pass) => createUserWithEmailAndPassword(auth, email, pass);
+  // Cloud sync
+  window.firebaseCRM.cloudSave = async (state) => {
+    const uid = auth.currentUser?.uid;
+    if (!uid) throw new Error("Not signed in.");
+    await setDoc(
+      userDocRef(uid),
+      { state, updated_at: serverTimestamp() },
+      { merge: true }
+    );
+    return true;
+  };
 
-  // TODO: Your existing onAuthStateChanged + Firestore sync logic remains here.
-  // If you want, paste your current sync functions and I’ll splice them into this cleanly.
+  window.firebaseCRM.cloudLoad = async () => {
+    const uid = auth.currentUser?.uid;
+    if (!uid) return null;
+    const snap = await getDoc(userDocRef(uid));
+    if (!snap.exists()) return null;
+    const data = snap.data() || {};
+    return { state: data.state || null, updated_at: data.updated_at || null };
+  };
 </script>
 
-  <script>
+<script>
     /*****************************************************************
      * Working v1 CRM - Single-file, localStorage persistence.
      * Enhancements:
@@ -1865,15 +1888,6 @@
       return { pulled: true, cloud_ms: cloudMs };
     }
 
-      // Persist locally under the per-user key and re-render.
-      saveState();
-      renderAll();
-      addActivity('Cloud sync: pulled latest data.', { source: 'firestore' });
-      saveState();
-      renderActivity();
-      showNotification('Cloud sync: data loaded.', 'success');
-    }
-
     function cloudSaveDebounced() {
       if (!isSignedIn || !window.firebaseCRM?.cloudSave) return;
       if (cloudSaveTimer) clearTimeout(cloudSaveTimer);
@@ -2431,13 +2445,6 @@
 
     // ---------- Event handling (delegation) ----------
     document.addEventListener('click', (e) => {
-      const nav = e.target.closest('[data-nav]');
-      if (nav) {
-        e.preventDefault();
-        setView(nav.dataset.nav);
-        return;
-      }
-
       const navlink = e.target.closest('[data-navlink]');
       if (navlink) {
         e.preventDefault();
@@ -2563,6 +2570,7 @@
     });
 
     // ---------- Filters / search inputs ----------
+
     function bindInput(id, fn) {
       const el = document.getElementById(id);
       if (!el) return;
@@ -2950,6 +2958,7 @@
   </script>
 </body>
 </html>
+
 
 
 
