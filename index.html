@@ -1864,6 +1864,16 @@
       }
     }
 
+
+    // Initialize auth UI immediately if Firebase is already available.
+    try {
+      if (window.firebaseCRM?.getUid) {
+        const uidNow = window.firebaseCRM.getUid();
+        // If uid is present, auth.currentUser is available; label as signed-in even before listener fires.
+        if (uidNow) updateAuthUI({ uid: uidNow, email: (window.firebaseCRM.getEmail ? window.firebaseCRM.getEmail() : undefined) });
+      }
+    } catch (_) {}
+
     async function cloudSyncPullIfAvailable() {
       if (!window.firebaseCRM?.cloudLoad) return { pulled: false, cloud_ms: 0 };
       const payload = await window.firebaseCRM.cloudLoad();
@@ -2609,6 +2619,7 @@
         if (!isSignedIn) openAuthModal();
         else {
           await window.firebaseCRM.signOut();
+          try { updateAuthUI(null); } catch (_) {}
           showNotification('Signed out.', 'success');
         }
       });
@@ -2625,6 +2636,8 @@
           if (!email || !pw) return setAuthError('Email and password are required.');
           setAuthError('');
           await window.firebaseCRM.signIn(email, pw);
+          // Force UI update immediately (auth listener may be delayed in some hosts)
+          try { updateAuthUI({ email, uid: window.firebaseCRM.getUid?.() }); } catch (_) {}
           closeAuthModal();
           showNotification('Signed in.', 'success');
         } catch (e) {
@@ -2642,6 +2655,8 @@
           if (pw.length < 6) return setAuthError('Password must be at least 6 characters.');
           setAuthError('');
           await window.firebaseCRM.createAccount(email, pw);
+          // Force UI update immediately
+          try { updateAuthUI({ email, uid: window.firebaseCRM.getUid?.() }); } catch (_) {}
           closeAuthModal();
           showNotification('Account created and signed in.', 'success');
         } catch (e) {
