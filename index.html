@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>DealFlow Pro - CRM (Working v1.3)</title>
+  <title>DealFlow Pro - CRM (Working v1)</title>
 
   <!-- Tailwind (prototype CDN) -->
   <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
@@ -139,6 +139,13 @@
             <button class="relative p-2 text-gray-600 hover:text-gray-900" aria-label="Messages">
               <i class="fas fa-envelope text-xl"></i>
             </button>
+            
+            <div class="flex items-center gap-2">
+              <span id="authStatus" class="text-sm text-gray-600 hidden md:inline">Local mode</span>
+              <button id="authBtn" class="px-3 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 text-sm font-medium focus-ring">
+                Sign in
+              </button>
+            </div>
             <div class="h-6 w-px bg-gray-300"></div>
             <button class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium"
                     data-open-quickadd="deal">
@@ -155,7 +162,7 @@
         <section data-view="dashboard">
           <div class="mb-8">
             <h2 class="text-2xl font-bold text-gray-900">Dashboard</h2>
-            <p class="text-gray-600">Overview based on your saved CRM data (localStorage).</p>
+            <p class="text-gray-600">Overview based on your saved CRM data (local + optional cloud sync).</p>
           </div>
 
           <!-- Stats -->
@@ -351,7 +358,9 @@
                     <th class="pb-3 text-right">Actions</th>
                   </tr>
                 </thead>
-                <tbody id="contactsTable" class="text-sm"></tbody>
+                <tbody id="contactsTable" class="text-sm">
+                  <!-- rows -->
+                </tbody>
               </table>
               <div id="contactsEmpty" class="text-sm text-gray-600 hidden py-6">No contacts found.</div>
             </div>
@@ -491,8 +500,8 @@
               <div class="flex items-center gap-2">
                 <select id="tasksFilter" class="border border-gray-300 rounded-lg px-3 py-2 focus-ring">
                   <option value="all">All</option>
-                  <option value="open">Not Done</option>
-                  <option value="done">Done</option>
+                  <option value="open">Open</option>
+                  <option value="done">Completed</option>
                   <option value="overdue">Overdue</option>
                   <option value="today">Due Today</option>
                 </select>
@@ -505,7 +514,7 @@
                   <tr class="text-left text-sm text-gray-500 border-b">
                     <th class="pb-3">Task</th>
                     <th class="pb-3">Due</th>
-                    <th class="pb-3">Stage</th>
+                    <th class="pb-3">Status</th>
                     <th class="pb-3">Linked To</th>
                     <th class="pb-3 text-right">Actions</th>
                   </tr>
@@ -593,6 +602,48 @@
     </div>
   </div>
 
+
+  <!-- AUTH MODAL -->
+  <div id="authModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full hidden z-50">
+    <div class="relative top-16 mx-auto p-5 border w-[420px] shadow-lg rounded-xl bg-white">
+      <div class="flex justify-between items-center mb-4">
+        <h3 class="text-lg font-semibold text-gray-900">Sign in</h3>
+        <button id="closeAuthModal" class="text-gray-500 hover:text-gray-700" aria-label="Close auth modal">
+          <i class="fas fa-times"></i>
+        </button>
+      </div>
+
+      <div class="space-y-4">
+        <div class="text-sm text-gray-600">
+          Sign in to enable cloud sync across devices. Your data remains available locally when offline.
+        </div>
+
+        <div class="space-y-3">
+          <input id="authEmail" type="email" placeholder="Email" class="w-full border border-gray-300 rounded-lg px-3 py-2 focus-ring">
+          <input id="authPassword" type="password" placeholder="Password" class="w-full border border-gray-300 rounded-lg px-3 py-2 focus-ring">
+        </div>
+
+        <div id="authError" class="hidden text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2"></div>
+
+        <div class="pt-4 border-t border-gray-200 flex items-center justify-between gap-3">
+          <button id="authCreate" class="px-3 py-2 bg-gray-100 text-gray-800 rounded-lg hover:bg-gray-200 text-sm font-medium">
+            Create account
+          </button>
+          <div class="flex gap-2">
+            <button id="authSignIn" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium">
+              Sign in
+            </button>
+          </div>
+        </div>
+
+        <div class="text-xs text-gray-500">
+          Tip: If you are hosting this file, ensure the domain is added under Firebase Authentication → Settings → Authorized domains.
+        </div>
+      </div>
+    </div>
+  </div>
+
+
   <!-- QUICK ADD / EDIT MODAL -->
   <div id="quickAddModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full hidden z-50">
     <div class="relative top-16 mx-auto p-5 border w-[420px] shadow-lg rounded-xl bg-white">
@@ -614,7 +665,6 @@
             <option value="task">Task</option>
             <option value="appointment">Appointment</option>
           </select>
-          <input id="editId" type="hidden" value="">
         </div>
 
         <!-- CONTACT FIELDS -->
@@ -683,11 +733,9 @@
               <option value="contact">Contact</option>
               <option value="deal">Deal</option>
               <option value="project">Project</option>
-              <option value="investor">Investor</option>
             </select>
           </div>
           <select name="linkId" class="w-full border border-gray-300 rounded-lg px-3 py-2 focus-ring hidden"></select>
-          <select name="taskStage" class="w-full border border-gray-300 rounded-lg px-3 py-2 focus-ring"></select>
         </div>
 
         <!-- APPOINTMENT FIELDS -->
@@ -732,19 +780,80 @@
     </div>
   </div>
 
+
+  <!-- Firebase Auth + Firestore Sync (module) -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-app.js";
+    import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-auth.js";
+    import { getFirestore, doc, getDoc, setDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-firestore.js";
+
+    // Firebase configuration (Summit Financial CRM)
+    const firebaseConfig = {
+      apiKey: "AIzaSyBvIWKdRexJGVIp1wh22ncdJow2S0lgS7s",
+      authDomain: "summit-financial-crm.firebaseapp.com",
+      projectId: "summit-financial-crm",
+      storageBucket: "summit-financial-crm.firebasestorage.app",
+      messagingSenderId: "670938490414",
+      appId: "1:670938490414:web:d54e7a025f3aa2d9afa1bf",
+      measurementId: "G-FCBSV3BWZ2"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+
+    // Expose a small, stable bridge for the non-module CRM script.
+    const bridge = {
+      _user: null,
+      getUid() { return this._user ? this._user.uid : null; },
+      onAuth(cb) { return onAuthStateChanged(auth, (u) => { this._user = u || null; cb(u || null); }); },
+      async signIn(email, password) { return signInWithEmailAndPassword(auth, email, password); },
+      async createAccount(email, password) { return createUserWithEmailAndPassword(auth, email, password); },
+      async signOut() { return signOut(auth); },
+
+      // One-doc-per-user sync (fastest integration with your current state shape)
+      async cloudLoad() {
+        if (!this._user) return null;
+        const ref = doc(db, "users", this._user.uid, "crm", "state");
+        const snap = await getDoc(ref);
+        if (!snap.exists()) return null;
+        const data = snap.data();
+        return {
+          state: data.state || null,
+          updated_at: data.updated_at || null
+        };
+      },
+
+      async cloudSave(stateObj) {
+        if (!this._user) return false;
+        const ref = doc(db, "users", this._user.uid, "crm", "state");
+        await setDoc(ref, {
+          state: stateObj,
+          updated_at: serverTimestamp()
+        }, { merge: true });
+        return true;
+      }
+    };
+
+    window.firebaseCRM = bridge;
+  </script>
+
+
   <script>
     /*****************************************************************
      * Working v1 CRM - Single-file, localStorage persistence.
-     * - Multi-view navigation
-     * - CRUD create + edit + delete
-     * - Deal advance stage
-     * - NEW: Task stages + advance stage
-     * - NEW: Project status advance
-     * - Appointment UX: end date/time auto-corrects when start changes
+     * Enhancements:
+     * - Full Edit support (Contacts, Investors, Deals, Projects, Tasks, Appointments)
+     * - Appointment end time auto-sync to start time (default +90m, and prevents end<start)
      *****************************************************************/
 
     // ---------- Utilities ----------
-    const STORAGE_KEY = "dealflowpro_state_v1";
+    const BASE_STORAGE_KEY = "dealflowpro_state_v1";
+
+    function getStorageKey() {
+      const uid = window.firebaseCRM?.getUid?.();
+      return uid ? `${BASE_STORAGE_KEY}_${uid}` : BASE_STORAGE_KEY;
+    }
 
     function uid(prefix="id") {
       return `${prefix}_${Math.random().toString(16).slice(2)}_${Date.now().toString(16)}`;
@@ -755,6 +864,7 @@
     }
 
     function toLocalDateTimeInputValue(d) {
+      // returns yyyy-MM-ddThh:mm in local time
       const pad = (n)=> String(n).padStart(2,'0');
       return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
     }
@@ -809,7 +919,7 @@
       }, 3000);
     }
 
-    // ---------- Enumerations ----------
+    // ---------- Enumerations (single source of truth) ----------
     const ENUMS = {
       relationshipStages: [
         { key: 'new', label: 'New', cls: 'stage-new' },
@@ -869,14 +979,6 @@
         { key: 'in_progress', label: 'In Progress' },
         { key: 'blocked', label: 'Blocked' },
         { key: 'complete', label: 'Complete' }
-      ],
-      // NEW: Task stages (single source of truth)
-      taskStages: [
-        { key: 'open', label: 'Open', cls: 'bg-yellow-100 text-yellow-800' },
-        { key: 'in_progress', label: 'In Progress', cls: 'bg-blue-100 text-blue-800' },
-        { key: 'waiting', label: 'Waiting', cls: 'bg-purple-100 text-purple-800' },
-        { key: 'blocked', label: 'Blocked', cls: 'bg-red-100 text-red-800' },
-        { key: 'done', label: 'Done', cls: 'bg-green-100 text-green-800' }
       ]
     };
 
@@ -897,7 +999,7 @@
     };
 
     function loadState() {
-      const raw = localStorage.getItem(STORAGE_KEY);
+      const raw = localStorage.getItem(getStorageKey());
       if (!raw) return false;
       try {
         const parsed = JSON.parse(raw);
@@ -911,7 +1013,8 @@
     }
 
     function saveState() {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      localStorage.setItem(getStorageKey(), JSON.stringify(state));
+      cloudSaveDebounced();
     }
 
     function addActivity(text, meta={}) {
@@ -920,26 +1023,20 @@
       if (state.activities.length > 500) state.activities = state.activities.slice(0, 500);
     }
 
-    // ---------- Backward compatibility: migrate tasks to stages ----------
-    function migrateTasksToStages() {
-      let changed = false;
-      state.tasks.forEach(t => {
-        if (!t.stage) {
-          t.stage = t.completed ? 'done' : 'open';
-          changed = true;
-        }
-        if (t.stage === 'done' && !t.completed) {
-          t.completed = true;
-          t.completed_at = t.completed_at || nowIso();
-          changed = true;
-        }
-        if (t.stage !== 'done' && t.completed) {
-          t.completed = false;
-          t.completed_at = null;
-          changed = true;
-        }
-      });
-      return changed;
+    // ---------- Edit helpers ----------
+    function findById(kind, id) {
+      const arr = state[kind] || [];
+      return arr.find(x => x.id === id) || null;
+    }
+
+    function kindForType(type) {
+      if (type === 'contact') return 'contacts';
+      if (type === 'investor') return 'investors';
+      if (type === 'deal') return 'deals';
+      if (type === 'project') return 'projects';
+      if (type === 'task') return 'tasks';
+      if (type === 'appointment') return 'appointments';
+      return null;
     }
 
     // ---------- Automations ----------
@@ -952,16 +1049,14 @@
       contact.next_touch_due_at = next.toISOString();
     }
 
-    function createTask({ title, description="", due_at=null, link=null, stage="open" }) {
-      const normalizedStage = stage || 'open';
+    function createTask({ title, description="", due_at=null, link=null }) {
       const t = {
         id: uid('task'),
         title,
         description,
         due_at,
-        stage: normalizedStage,
-        completed: normalizedStage === 'done',
-        completed_at: normalizedStage === 'done' ? nowIso() : null,
+        completed: false,
+        completed_at: null,
         created_at: nowIso(),
         link
       };
@@ -993,8 +1088,7 @@
           title: `DD: ${label}`,
           description: `Auto-generated for deal "${deal.name}".`,
           due_at: due ? due.toISOString() : null,
-          link: { type:'deal', id: deal.id },
-          stage: 'open'
+          link: { type:'deal', id: deal.id }
         });
       });
 
@@ -1047,15 +1141,14 @@
           title: `${project.name}: ${s}`,
           description: `Auto-generated from template "${getEnum('projectTypes', type)?.label || type}".`,
           due_at: due ? due.toISOString() : null,
-          link: { type:'project', id: project.id },
-          stage: 'open'
+          link: { type:'project', id: project.id }
         });
       });
 
       addActivity(`Project "${project.name}" created; template tasks generated.`, { project_id: project.id });
     }
 
-    function createAppointment({ title, start_at, end_at, location="", notes="", link=null, suppressPrepTask=false }) {
+    function createAppointment({ title, start_at, end_at, location="", notes="", link=null }) {
       const appt = {
         id: uid('appt'),
         title,
@@ -1068,23 +1161,18 @@
       };
       state.appointments.unshift(appt);
 
-      if (!suppressPrepTask) {
-        const start = start_at ? new Date(start_at) : null;
-        if (start && !isNaN(start.getTime())) {
-          const prep = new Date(start.getTime() - 24*60*60*1000);
-          createTask({
-            title: `Prep: ${title}`,
-            description: "Auto-generated prep task (24h prior).",
-            due_at: prep.toISOString(),
-            link,
-            stage: 'open'
-          });
-          addActivity(`Appointment "${title}" created; prep task generated.`, { appointment_id: appt.id });
-        } else {
-          addActivity(`Appointment "${title}" created.`, { appointment_id: appt.id });
-        }
+      const start = start_at ? new Date(start_at) : null;
+      if (start && !isNaN(start.getTime())) {
+        const prep = new Date(start.getTime() - 24*60*60*1000);
+        createTask({
+          title: `Prep: ${title}`,
+          description: "Auto-generated prep task (24h prior).",
+          due_at: prep.toISOString(),
+          link
+        });
+        addActivity(`Appointment "${title}" created; prep task generated.`, { appointment_id: appt.id });
       } else {
-        addActivity(`Appointment "${title}" updated.`, { appointment_id: appt.id });
+        addActivity(`Appointment "${title}" created.`, { appointment_id: appt.id });
       }
 
       return appt;
@@ -1100,7 +1188,7 @@
       const def = getEnum(enumName, key);
       if (!def) return `<span class="px-2 py-1 rounded-full text-xs bg-gray-100 text-gray-800">—</span>`;
       const cls = def.cls ? def.cls : 'bg-gray-100 text-gray-800';
-      return `<span class="${cls} px-2 py-1 rounded-full text-xs">${escapeHtml(def.label)}</span>`;
+      return `<span class="${cls} px-2 py-1 rounded-full text-xs">${def.label}</span>`;
     }
 
     function linkLabel(link) {
@@ -1129,7 +1217,7 @@
     function compute() {
       const now = new Date();
 
-      const tasksOpen = state.tasks.filter(t => (t.stage || (t.completed ? 'done' : 'open')) !== 'done');
+      const tasksOpen = state.tasks.filter(t => !t.completed);
       const tasksOverdue = tasksOpen.filter(t => t.due_at && new Date(t.due_at) < now);
       const tasksDueToday = tasksOpen.filter(t => {
         if (!t.due_at) return false;
@@ -1184,12 +1272,8 @@
               <p class="font-medium">${escapeHtml(t.title)}</p>
               <p class="text-sm text-gray-600">Due ${t.due_at ? formatDateTimeShort(t.due_at) : '—'} • ${escapeHtml(linkLabel(t.link))}</p>
             </div>
-            <div class="flex gap-2">
-              <button class="text-blue-600 hover:text-blue-800 text-sm font-medium"
-                      data-action="task-advance" data-id="${t.id}">Advance</button>
-              <button class="text-green-700 hover:text-green-900 text-sm font-medium"
-                      data-action="task-complete" data-id="${t.id}">Done</button>
-            </div>
+            <button class="text-blue-600 hover:text-blue-800 text-sm font-medium"
+                    data-action="task-complete" data-id="${t.id}">Mark Complete</button>
           </div>
         `).join('');
       }
@@ -1206,7 +1290,7 @@
               <p class="text-sm text-gray-600">${formatDateTimeShort(a.start_at)} - ${formatDateTimeShort(a.end_at)} • ${escapeHtml(linkLabel(a.link))}</p>
             </div>
             <button class="text-blue-600 hover:text-blue-800 text-sm font-medium"
-                    data-action="appointment-edit" data-id="${a.id}">Edit</button>
+                    data-action="go-calendar" data-id="${a.id}">Details</button>
           </div>
         `).join('');
       }
@@ -1227,12 +1311,8 @@
                 <p class="text-sm text-gray-600">Cadence: ${c.cadence_days ? `${c.cadence_days} days` : '—'} • Next touch due: ${c.next_touch_due_at ? formatDateShort(c.next_touch_due_at) : '—'}</p>
               </div>
             </div>
-            <div class="flex gap-2">
-              <button class="px-3 py-1 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700"
-                      data-action="contact-touch" data-id="${c.id}">Log Touch</button>
-              <button class="px-3 py-1 bg-gray-100 text-gray-800 text-sm rounded-lg hover:bg-gray-200"
-                      data-action="contact-edit" data-id="${c.id}">Edit</button>
-            </div>
+            <button class="px-3 py-1 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700"
+                    data-action="contact-touch" data-id="${c.id}">Log Touch</button>
           </div>
         `).join('');
       }
@@ -1250,7 +1330,7 @@
           return `
             <div>
               <div class="flex justify-between text-sm mb-1">
-                <span class="font-medium">${escapeHtml(s.label)}</span>
+                <span class="font-medium">${s.label}</span>
                 <span class="text-gray-600">${count}</span>
               </div>
               <div class="w-full bg-gray-200 rounded-full h-2">
@@ -1271,7 +1351,7 @@
           const count = investorsByStage[s.key] || 0;
           return `
             <div class="flex items-center justify-between p-2 rounded ${count ? '' : 'opacity-60'}" style="background-color: rgba(243,244,246,.7)">
-              <span class="text-sm font-medium">${escapeHtml(s.label)}</span>
+              <span class="text-sm font-medium">${s.label}</span>
               <span class="${s.cls} text-xs font-medium px-2 py-1 rounded-full">${count}</span>
             </div>
           `;
@@ -1423,10 +1503,10 @@
 
       list.innerHTML = filtered.map(p => {
         const type = getEnum('projectTypes', p.type)?.label || p.type;
-        const statusLabel = getEnum('projectStatuses', p.status)?.label || p.status;
+        const status = getEnum('projectStatuses', p.status)?.label || p.status;
 
         const linkedTasks = state.tasks.filter(t => t.link && t.link.type === 'project' && t.link.id === p.id);
-        const done = linkedTasks.filter(t => (t.stage || (t.completed ? 'done' : 'open')) === 'done').length;
+        const done = linkedTasks.filter(t => t.completed).length;
         const pct = linkedTasks.length ? Math.round((done / linkedTasks.length) * 100) : 0;
 
         return `
@@ -1436,10 +1516,8 @@
                 <h4 class="font-medium">${escapeHtml(p.name)}</h4>
                 <p class="text-sm text-gray-600">${escapeHtml(type)} • Target: ${escapeHtml(p.target_date ? formatDateShort(p.target_date) : '—')}</p>
               </div>
-              <div class="flex items-center gap-2 flex-wrap justify-end">
-                <span class="inline-block px-2 py-1 text-xs font-medium bg-blue-100 text-blue-800 rounded">${escapeHtml(statusLabel)}</span>
-                <button class="text-blue-600 hover:text-blue-800 text-sm font-medium"
-                        data-action="project-advance" data-id="${p.id}">Advance</button>
+              <div class="flex items-center gap-2">
+                <span class="inline-block px-2 py-1 text-xs font-medium bg-blue-100 text-blue-800 rounded">${escapeHtml(status)}</span>
                 <button class="text-gray-700 hover:text-gray-900 text-sm font-medium"
                         data-action="project-edit" data-id="${p.id}">Edit</button>
                 <button class="text-red-600 hover:text-red-800 text-sm font-medium"
@@ -1470,20 +1548,19 @@
       const now = new Date();
 
       const filtered = state.tasks.filter(t => {
-        const stage = (t.stage || (t.completed ? 'done' : 'open'));
-        const hay = `${t.title} ${t.description||""} ${linkLabel(t.link)} ${stage}`.toLowerCase();
+        const hay = `${t.title} ${t.description||""} ${linkLabel(t.link)}`.toLowerCase();
         if (q && !hay.includes(q)) return false;
 
-        if (filter === 'open' && stage === 'done') return false;
-        if (filter === 'done' && stage !== 'done') return false;
+        if (filter === 'open' && t.completed) return false;
+        if (filter === 'done' && !t.completed) return false;
 
         if (filter === 'overdue') {
-          if (stage === 'done') return false;
+          if (t.completed) return false;
           if (!t.due_at) return false;
           return new Date(t.due_at) < now;
         }
         if (filter === 'today') {
-          if (stage === 'done') return false;
+          if (t.completed) return false;
           if (!t.due_at) return false;
           const d = new Date(t.due_at);
           return isSameDay(d, now);
@@ -1500,29 +1577,26 @@
 
       tbody.innerHTML = filtered.map(t => {
         const due = t.due_at ? formatDateTimeShort(t.due_at) : "—";
-        const stageKey = (t.stage || (t.completed ? 'done' : 'open'));
-        const stage = stageBadge('taskStages', stageKey);
+        const status = t.completed
+          ? `<span class="px-2 py-1 rounded-full text-xs bg-green-100 text-green-800">Completed</span>`
+          : `<span class="px-2 py-1 rounded-full text-xs bg-yellow-100 text-yellow-800">Open</span>`;
 
-        const overdue = (stageKey !== 'done' && t.due_at && new Date(t.due_at) < now)
+        const overdue = (!t.completed && t.due_at && new Date(t.due_at) < now)
           ? `<span class="ml-2 px-2 py-1 rounded-full text-xs bg-red-100 text-red-800">Overdue</span>`
           : "";
 
         return `
-          <tr class="border-b border-gray-100 hover:bg-gray-50 ${stageKey === 'done' ? 'opacity-70' : ''}">
+          <tr class="border-b border-gray-100 hover:bg-gray-50 ${t.completed ? 'opacity-70' : ''}">
             <td class="py-3 font-medium">${escapeHtml(t.title)}</td>
             <td class="py-3 text-gray-600">${escapeHtml(due)} ${overdue}</td>
-            <td class="py-3">${stage}</td>
+            <td class="py-3">${status}</td>
             <td class="py-3 text-gray-600">${escapeHtml(linkLabel(t.link))}</td>
             <td class="py-3 text-right space-x-2">
               <button class="text-gray-700 hover:text-gray-900 text-sm font-medium"
                       data-action="task-edit" data-id="${t.id}">Edit</button>
-              ${stageKey === 'done' ? '' : `
+              ${t.completed ? '' : `
                 <button class="text-blue-600 hover:text-blue-800 text-sm font-medium"
-                        data-action="task-advance" data-id="${t.id}">Advance</button>
-              `}
-              ${stageKey === 'done' ? '' : `
-                <button class="text-green-700 hover:text-green-900 text-sm font-medium"
-                        data-action="task-complete" data-id="${t.id}">Done</button>
+                        data-action="task-complete" data-id="${t.id}">Complete</button>
               `}
               <button class="text-red-600 hover:text-red-800 text-sm font-medium"
                       data-action="task-delete" data-id="${t.id}">Delete</button>
@@ -1602,7 +1676,7 @@
       document.getElementById('searchQuery').textContent = query || "";
 
       const results = [];
-      const push = (kind, title, subtitle, navView) => results.push({ kind, title, subtitle, navView });
+      const push = (kind, title, subtitle, navView) => { results.push({ kind, title, subtitle, navView }); };
 
       state.contacts.forEach(c => {
         const hay = `${c.name} ${c.organization||""} ${c.email||""} ${c.phone||""} ${c.notes||""}`.toLowerCase();
@@ -1627,9 +1701,8 @@
       });
 
       state.tasks.forEach(t => {
-        const stage = (t.stage || (t.completed ? 'done' : 'open'));
-        const hay = `${t.title} ${t.description||""} ${linkLabel(t.link)} ${stage}`.toLowerCase();
-        if (q && hay.includes(q)) push('Task', t.title, `${getEnum('taskStages', stage)?.label || stage} • Due: ${t.due_at ? formatDateTimeShort(t.due_at) : '—'}`, 'tasks');
+        const hay = `${t.title} ${t.description||""} ${linkLabel(t.link)}`.toLowerCase();
+        if (q && hay.includes(q)) push('Task', t.title, `${t.completed ? 'Completed' : 'Open'} • Due: ${t.due_at ? formatDateTimeShort(t.due_at) : '—'}`, 'tasks');
       });
 
       state.appointments.forEach(a => {
@@ -1697,8 +1770,96 @@
     // ---------- Modal helpers ----------
     const modal = document.getElementById('quickAddModal');
     const addType = document.getElementById('addType');
-    const editId = document.getElementById('editId');
     const formError = document.getElementById('formError');
+
+
+    // ---------- Auth UI + Cloud Sync ----------
+    const authBtn = document.getElementById('authBtn');
+    const authStatus = document.getElementById('authStatus');
+
+    const authModal = document.getElementById('authModal');
+    const closeAuthModalBtn = document.getElementById('closeAuthModal');
+    const authEmail = document.getElementById('authEmail');
+    const authPassword = document.getElementById('authPassword');
+    const authError = document.getElementById('authError');
+    const authCreate = document.getElementById('authCreate');
+    const authSignIn = document.getElementById('authSignIn');
+
+    let isSignedIn = false;
+    let cloudReady = false;
+    let cloudSaveTimer = null;
+
+    function setAuthError(msg) {
+      authError.textContent = msg;
+      authError.classList.toggle('hidden', !msg);
+    }
+
+    function openAuthModal() {
+      setAuthError('');
+      authModal.classList.remove('hidden');
+      setTimeout(() => authEmail?.focus(), 0);
+    }
+
+    function closeAuthModal() {
+      authModal.classList.add('hidden');
+      setAuthError('');
+    }
+
+    function updateAuthUI(user) {
+      isSignedIn = !!user;
+      const label = user ? `Signed in: ${user.email || 'account'}` : 'Local mode';
+      if (authStatus) authStatus.textContent = label;
+
+      if (authBtn) {
+        authBtn.textContent = user ? 'Sign out' : 'Sign in';
+        authBtn.classList.toggle('bg-gray-900', !user);
+        authBtn.classList.toggle('bg-red-600', !!user);
+        authBtn.classList.toggle('hover:bg-gray-800', !user);
+        authBtn.classList.toggle('hover:bg-red-700', !!user);
+      }
+    }
+
+    async function cloudSyncPullIfAvailable() {
+      if (!window.firebaseCRM?.cloudLoad) return;
+      const payload = await window.firebaseCRM.cloudLoad();
+      if (!payload || !payload.state) return;
+
+      // Replace local in-memory state with cloud state.
+      const cloudState = payload.state;
+      for (const k of Object.keys(state)) {
+        if (Array.isArray(state[k]) && Array.isArray(cloudState[k])) state[k] = cloudState[k];
+      }
+
+      // Persist locally under the per-user key and re-render.
+      saveState();
+      renderAll();
+      addActivity('Cloud sync: pulled latest data.', { source: 'firestore' });
+      saveState();
+      renderActivity();
+      showNotification('Cloud sync: data loaded.', 'success');
+    }
+
+    function cloudSaveDebounced() {
+      if (!isSignedIn || !window.firebaseCRM?.cloudSave) return;
+      if (cloudSaveTimer) clearTimeout(cloudSaveTimer);
+      cloudSaveTimer = setTimeout(async () => {
+        try {
+          await window.firebaseCRM.cloudSave(state);
+        } catch (e) {
+          console.warn('Cloud save failed:', e);
+        }
+      }, 800);
+    }
+
+    let modalMode = 'create'; // 'create' | 'edit'
+    let editing = { type: null, id: null };
+
+    function setModalMode(mode, type, id=null) {
+      modalMode = mode;
+      editing = { type: type || null, id: id || null };
+      const submitBtn = document.getElementById('submitQuickAdd');
+      submitBtn.textContent = (mode === 'edit') ? 'Save' : 'Add';
+    }
 
     const formMap = {
       contact: document.getElementById('formContact'),
@@ -1708,135 +1869,6 @@
       task: document.getElementById('formTask'),
       appointment: document.getElementById('formAppointment')
     };
-
-    function showForm(type) {
-      Object.values(formMap).forEach(el => el.classList.add('hidden'));
-      formMap[type].classList.remove('hidden');
-
-      addType.value = type;
-
-      formError.classList.add('hidden');
-      formError.textContent = "";
-
-      populateFormSelects(type);
-
-      const isEdit = !!editId.value;
-      document.getElementById('quickAddTitle').textContent =
-        `${isEdit ? 'Edit' : 'Quick Add'}: ${type.charAt(0).toUpperCase() + type.slice(1)}`;
-      document.getElementById('submitQuickAdd').textContent = isEdit ? 'Save' : 'Add';
-
-      setTimeout(() => {
-        const first = formMap[type].querySelector('input, select, textarea');
-        if (first) first.focus();
-      }, 0);
-    }
-
-    function openModal(type='contact') {
-      editId.value = "";
-      modal.classList.remove('hidden');
-      showForm(type);
-    }
-
-    function openEditModal(type, id) {
-      editId.value = id;
-      modal.classList.remove('hidden');
-      showForm(type);
-      const record = getRecord(type, id);
-      if (!record) return;
-
-      // Set form values for edit
-      if (type === 'contact') {
-        setFormValues(formMap.contact, {
-          fullName: record.name || '',
-          email: record.email || '',
-          phone: record.phone || '',
-          organization: record.organization || '',
-          stage: record.stage || 'warm',
-          cadenceDays: record.cadence_days || 0,
-          notes: record.notes || ''
-        });
-      }
-
-      if (type === 'investor') {
-        setFormValues(formMap.investor, {
-          contactId: record.contact_id || '',
-          investorType: record.type || 'hnwi',
-          investorStage: record.stage || 'prospect',
-          checkMin: record.check_min ?? '',
-          checkMax: record.check_max ?? '',
-          thesis: record.thesis || '',
-          preferences: record.preferences || ''
-        });
-      }
-
-      if (type === 'deal') {
-        setFormValues(formMap.deal, {
-          dealName: record.name || '',
-          dealType: record.type || 'multifamily',
-          dealStage: record.stage || 'sourced',
-          targetClose: record.close_target_date ? new Date(record.close_target_date).toISOString().slice(0,10) : '',
-          amount: record.amount ?? '',
-          dealNotes: record.notes || ''
-        });
-      }
-
-      if (type === 'project') {
-        setFormValues(formMap.project, {
-          projectName: record.name || '',
-          projectType: record.type || 'other',
-          projectStatus: record.status || 'planning',
-          targetDate: record.target_date ? new Date(record.target_date).toISOString().slice(0,10) : '',
-          projectNotes: record.notes || ''
-        });
-      }
-
-      if (type === 'task') {
-        const stageKey = record.stage || (record.completed ? 'done' : 'open');
-        setFormValues(formMap.task, {
-          taskTitle: record.title || '',
-          taskDesc: record.description || '',
-          taskDue: record.due_at ? toLocalDateTimeInputValue(new Date(record.due_at)) : '',
-          linkType: record.link?.type || '',
-          taskStage: stageKey
-        });
-
-        const linkTypeSel = formMap.task.querySelector('[name="linkType"]');
-        const linkIdSel = formMap.task.querySelector('[name="linkId"]');
-        if (record.link?.type) {
-          populateLinkIdSelect(linkIdSel, record.link.type);
-          linkIdSel.value = record.link.id || '';
-          linkIdSel.classList.toggle('hidden', !linkIdSel.options.length);
-        } else {
-          linkIdSel.classList.add('hidden');
-        }
-      }
-
-      if (type === 'appointment') {
-        setFormValues(formMap.appointment, {
-          apptTitle: record.title || '',
-          startAt: record.start_at ? toLocalDateTimeInputValue(new Date(record.start_at)) : '',
-          endAt: record.end_at ? toLocalDateTimeInputValue(new Date(record.end_at)) : '',
-          location: record.location || '',
-          apptLinkType: record.link?.type || '',
-          apptNotes: record.notes || ''
-        });
-
-        const linkTypeSel = formMap.appointment.querySelector('[name="apptLinkType"]');
-        const linkIdSel = formMap.appointment.querySelector('[name="apptLinkId"]');
-        if (record.link?.type) {
-          populateLinkIdSelect(linkIdSel, record.link.type);
-          linkIdSel.value = record.link.id || '';
-          linkIdSel.classList.toggle('hidden', !linkIdSel.options.length);
-        } else {
-          linkIdSel.classList.add('hidden');
-        }
-      }
-    }
-
-    function closeModal() {
-      modal.classList.add('hidden');
-      editId.value = "";
-    }
 
     function setFormError(msg) {
       formError.textContent = msg;
@@ -1851,7 +1883,6 @@
       formEl.querySelectorAll('select').forEach(el => {
         if (el.options.length) el.selectedIndex = 0;
       });
-
       const linkId = formEl.querySelector('[name="linkId"]');
       if (linkId) linkId.classList.add('hidden');
       const apptLinkId = formEl.querySelector('[name="apptLinkId"]');
@@ -1868,11 +1899,150 @@
     }
 
     function setFormValues(formEl, values) {
-      Object.entries(values).forEach(([k, v]) => {
-        const el = formEl.querySelector(`[name="${CSS.escape(k)}"]`);
-        if (!el) return;
-        el.value = (v ?? '');
+      formEl.querySelectorAll('input, select, textarea').forEach(el => {
+        if (!el.name) return;
+        if (!(el.name in values)) return;
+
+        if (el.type === 'datetime-local') {
+          const d = parseMaybeDate(values[el.name]);
+          el.value = d ? toLocalDateTimeInputValue(d) : '';
+          return;
+        }
+        if (el.type === 'date') {
+          const d = parseMaybeDate(values[el.name]);
+          el.value = d
+            ? `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
+            : '';
+          return;
+        }
+
+        el.value = values[el.name] ?? '';
       });
+    }
+
+    function showForm(type) {
+      Object.values(formMap).forEach(el => el.classList.add('hidden'));
+      formMap[type].classList.remove('hidden');
+      addType.value = type;
+      formError.classList.add('hidden');
+      formError.textContent = "";
+      document.getElementById('quickAddTitle').textContent = `${modalMode === 'edit' ? 'Edit' : 'Quick Add'}: ${type.charAt(0).toUpperCase() + type.slice(1)}`;
+
+      populateFormSelects(type);
+
+      setTimeout(() => {
+        const first = formMap[type].querySelector('input, select, textarea');
+        if (first) first.focus();
+      }, 0);
+    }
+
+    function openModal(type='contact') {
+      modal.classList.remove('hidden');
+      setModalMode('create', type, null);
+      showForm(type);
+    }
+
+    function closeModal() {
+      modal.classList.add('hidden');
+      setModalMode('create', 'contact', null);
+    }
+
+    function openEditModal(type, id) {
+      const kind = kindForType(type);
+      const record = kind ? findById(kind, id) : null;
+      if (!record) return;
+
+      modal.classList.remove('hidden');
+      setModalMode('edit', type, id);
+      showForm(type);
+
+      if (type === 'contact') {
+        setFormValues(formMap.contact, {
+          fullName: record.name,
+          email: record.email || '',
+          phone: record.phone || '',
+          organization: record.organization || '',
+          stage: record.stage || 'warm',
+          cadenceDays: record.cadence_days || 0,
+          notes: record.notes || ''
+        });
+      }
+
+      if (type === 'investor') {
+        setFormValues(formMap.investor, {
+          contactId: record.contact_id,
+          investorType: record.type,
+          investorStage: record.stage,
+          checkMin: record.check_min ?? '',
+          checkMax: record.check_max ?? '',
+          thesis: record.thesis || '',
+          preferences: record.preferences || ''
+        });
+      }
+
+      if (type === 'deal') {
+        setFormValues(formMap.deal, {
+          dealName: record.name,
+          dealType: record.type,
+          dealStage: record.stage,
+          targetClose: record.close_target_date,
+          amount: record.amount ?? '',
+          dealNotes: record.notes || ''
+        });
+      }
+
+      if (type === 'project') {
+        setFormValues(formMap.project, {
+          projectName: record.name,
+          projectType: record.type,
+          projectStatus: record.status,
+          targetDate: record.target_date,
+          projectNotes: record.notes || ''
+        });
+      }
+
+      if (type === 'task') {
+        setFormValues(formMap.task, {
+          taskTitle: record.title,
+          taskDesc: record.description || '',
+          taskDue: record.due_at,
+          linkType: record.link?.type || '',
+        });
+
+        const linkIdEl = formMap.task.querySelector('[name="linkId"]');
+        const lt = record.link?.type || '';
+        if (lt) {
+          populateLinkIdSelect(linkIdEl, lt);
+          linkIdEl.classList.remove('hidden');
+          linkIdEl.value = record.link?.id || '';
+        } else {
+          linkIdEl.classList.add('hidden');
+        }
+      }
+
+      if (type === 'appointment') {
+        setFormValues(formMap.appointment, {
+          apptTitle: record.title,
+          startAt: record.start_at,
+          endAt: record.end_at,
+          location: record.location || '',
+          apptNotes: record.notes || '',
+          apptLinkType: record.link?.type || '',
+        });
+
+        const lt = record.link?.type || '';
+        const apptLinkIdEl = formMap.appointment.querySelector('[name="apptLinkId"]');
+        if (lt) {
+          populateLinkIdSelect(apptLinkIdEl, lt === 'investor' ? 'investor' : lt);
+          apptLinkIdEl.classList.remove('hidden');
+          apptLinkIdEl.value = record.link?.id || '';
+        } else {
+          apptLinkIdEl.classList.add('hidden');
+        }
+      }
+
+      // Update title
+      document.getElementById('quickAddTitle').textContent = `Edit: ${type.charAt(0).toUpperCase() + type.slice(1)}`;
     }
 
     // ---------- Populate selects ----------
@@ -1893,65 +2063,53 @@
     }
 
     function populateFormSelects(type) {
-      // Contact form
       const contactStageSel = formMap.contact.querySelector('[name="stage"]');
       setOptions(contactStageSel, ENUMS.relationshipStages.map(s => ({ value:s.key, label:s.label })));
+      if (!contactStageSel.value) contactStageSel.value = 'warm';
 
-      // Investor form
       const invContactSel = formMap.investor.querySelector('[name="contactId"]');
       setOptions(invContactSel,
         state.contacts.map(c => ({ value:c.id, label:c.name })),
         state.contacts.length ? null : "No contacts yet (create one first)"
       );
+
       const invTypeSel = formMap.investor.querySelector('[name="investorType"]');
       setOptions(invTypeSel, ENUMS.investorTypes.map(s => ({ value:s.key, label:s.label })));
+      if (!invTypeSel.value) invTypeSel.value = 'hnwi';
 
       const invStageSel = formMap.investor.querySelector('[name="investorStage"]');
       setOptions(invStageSel, ENUMS.investorStages.map(s => ({ value:s.key, label:s.label })));
+      if (!invStageSel.value) invStageSel.value = 'prospect';
 
-      // Deal form
       const dealTypeSel = formMap.deal.querySelector('[name="dealType"]');
       setOptions(dealTypeSel, ENUMS.dealTypes.map(s => ({ value:s.key, label:s.label })));
+      if (!dealTypeSel.value) dealTypeSel.value = 'multifamily';
 
       const dealStageSel = formMap.deal.querySelector('[name="dealStage"]');
       setOptions(dealStageSel, ENUMS.dealStages.map(s => ({ value:s.key, label:s.label })));
+      if (!dealStageSel.value) dealStageSel.value = 'sourced';
 
-      // Project form
       const projTypeSel = formMap.project.querySelector('[name="projectType"]');
       setOptions(projTypeSel, ENUMS.projectTypes.map(s => ({ value:s.key, label:s.label })));
+      if (!projTypeSel.value) projTypeSel.value = 'llc_setup';
 
       const projStatusSel = formMap.project.querySelector('[name="projectStatus"]');
       setOptions(projStatusSel, ENUMS.projectStatuses.map(s => ({ value:s.key, label:s.label })));
+      if (!projStatusSel.value) projStatusSel.value = 'planning';
 
-      // Task form stage
-      const taskStageSel = formMap.task.querySelector('[name="taskStage"]');
-      setOptions(taskStageSel, ENUMS.taskStages.map(s => ({ value:s.key, label:s.label })));
-
-      // Task form link choices
       const linkIdSel = formMap.task.querySelector('[name="linkId"]');
       linkIdSel.classList.add('hidden');
       setOptions(linkIdSel, [], "Select item");
 
-      // Appointment form link choices
       const apptLinkIdSel = formMap.appointment.querySelector('[name="apptLinkId"]');
       apptLinkIdSel.classList.add('hidden');
       setOptions(apptLinkIdSel, [], "Select item");
 
-      // Defaults (only if not editing)
-      if (!editId.value) {
-        contactStageSel.value = 'warm';
-        invTypeSel.value = 'hnwi';
-        invStageSel.value = 'prospect';
-        dealTypeSel.value = 'multifamily';
-        dealStageSel.value = 'sourced';
-        projTypeSel.value = 'llc_setup';
-        projStatusSel.value = 'planning';
-        taskStageSel.value = 'open';
-
-        // Default date-times
+      // Default date-times only in create mode
+      if (modalMode === 'create') {
         const now = new Date();
         const inHour = new Date(now.getTime() + 60*60*1000);
-        const inTwo = new Date(now.getTime() + 2*60*60*1000);
+        const in90 = new Date(now.getTime() + 90*60*1000);
 
         const taskDue = formMap.task.querySelector('[name="taskDue"]');
         if (taskDue) taskDue.value = toLocalDateTimeInputValue(inHour);
@@ -1959,7 +2117,7 @@
         const startAt = formMap.appointment.querySelector('[name="startAt"]');
         const endAt = formMap.appointment.querySelector('[name="endAt"]');
         if (startAt) startAt.value = toLocalDateTimeInputValue(inHour);
-        if (endAt) endAt.value = toLocalDateTimeInputValue(inTwo);
+        if (endAt) endAt.value = toLocalDateTimeInputValue(in90);
       }
     }
 
@@ -2008,8 +2166,8 @@
         contact_id,
         type,
         stage,
-        check_min: check_min !== null && check_min !== '' ? Number(check_min) : null,
-        check_max: check_max !== null && check_max !== '' ? Number(check_max) : null,
+        check_min: check_min ? Number(check_min) : null,
+        check_max: check_max ? Number(check_max) : null,
         thesis,
         preferences,
         created_at: nowIso()
@@ -2027,13 +2185,12 @@
         type,
         stage,
         close_target_date: close_target_date ? new Date(close_target_date).toISOString() : null,
-        amount: amount !== null && amount !== '' ? Number(amount) : null,
+        amount: amount ? Number(amount) : null,
         notes,
         created_at: nowIso()
       };
       state.deals.unshift(d);
       addActivity(`Deal created: ${name}`, { deal_id: d.id });
-
       if (stage === 'due_diligence') generateDDChecklist(d);
       return d;
     }
@@ -2050,9 +2207,70 @@
       };
       state.projects.unshift(p);
       addActivity(`Project created: ${name}`, { project_id: p.id });
-
       generateProjectTemplateTasks(p);
       return p;
+    }
+
+    // --- Update functions ---
+    function updateContact(id, patch) {
+      const c = findById('contacts', id);
+      if (!c) return false;
+      Object.assign(c, patch);
+      c.cadence_days = clampInt(c.cadence_days, 0);
+      if (c.cadence_days) ensureCadence(c);
+      else c.next_touch_due_at = null;
+      addActivity(`Contact updated: ${c.name}`, { contact_id: c.id });
+      return true;
+    }
+
+    function updateInvestor(id, patch) {
+      const inv = findById('investors', id);
+      if (!inv) return false;
+      Object.assign(inv, patch);
+      inv.check_min = (inv.check_min === '' || inv.check_min === null) ? null : Number(inv.check_min);
+      inv.check_max = (inv.check_max === '' || inv.check_max === null) ? null : Number(inv.check_max);
+      addActivity(`Investor updated.`, { investor_id: inv.id });
+      return true;
+    }
+
+    function updateDeal(id, patch) {
+      const d = findById('deals', id);
+      if (!d) return false;
+      const prevStage = d.stage;
+      Object.assign(d, patch);
+      d.close_target_date = d.close_target_date ? new Date(d.close_target_date).toISOString() : null;
+      d.amount = (d.amount === '' || d.amount === null) ? null : Number(d.amount);
+      addActivity(`Deal updated: ${d.name}`, { deal_id: d.id });
+      if (prevStage !== 'due_diligence' && d.stage === 'due_diligence') generateDDChecklist(d);
+      return true;
+    }
+
+    function updateProject(id, patch) {
+      const p = findById('projects', id);
+      if (!p) return false;
+      Object.assign(p, patch);
+      p.target_date = p.target_date ? new Date(p.target_date).toISOString() : null;
+      addActivity(`Project updated: ${p.name}`, { project_id: p.id });
+      return true;
+    }
+
+    function updateTask(id, patch) {
+      const t = findById('tasks', id);
+      if (!t) return false;
+      Object.assign(t, patch);
+      t.due_at = t.due_at ? new Date(t.due_at).toISOString() : null;
+      addActivity(`Task updated: ${t.title}`, { task_id: t.id });
+      return true;
+    }
+
+    function updateAppointment(id, patch) {
+      const a = findById('appointments', id);
+      if (!a) return false;
+      Object.assign(a, patch);
+      a.start_at = a.start_at ? new Date(a.start_at).toISOString() : null;
+      a.end_at = a.end_at ? new Date(a.end_at).toISOString() : null;
+      addActivity(`Appointment updated: ${a.title}`, { appointment_id: a.id });
+      return true;
     }
 
     function logContactTouch(contactId) {
@@ -2066,12 +2284,11 @@
 
     function completeTask(taskId) {
       const t = state.tasks.find(x => x.id === taskId);
-      if (!t) return;
-      t.stage = 'done';
+      if (!t || t.completed) return;
       t.completed = true;
       t.completed_at = nowIso();
       addActivity(`Task completed: ${t.title}`, { task_id: t.id });
-      showNotification('Task marked done', 'success');
+      showNotification('Task marked complete', 'success');
     }
 
     function deleteById(kind, id) {
@@ -2109,63 +2326,6 @@
 
       if (next === 'due_diligence') generateDDChecklist(d);
       showNotification(`Deal advanced to ${getEnum('dealStages', next)?.label || next}`, 'success');
-    }
-
-    // NEW: Task stage advancement
-    function advanceTaskStage(taskId) {
-      const t = state.tasks.find(x => x.id === taskId);
-      if (!t) return;
-
-      const stages = ENUMS.taskStages.map(s => s.key);
-      const cur = (t.stage || (t.completed ? 'done' : 'open'));
-      const idx = stages.indexOf(cur);
-      const next = stages[Math.min(idx + 1, stages.length - 1)];
-      if (next === cur) return;
-
-      t.stage = next;
-      if (next === 'done') {
-        t.completed = true;
-        t.completed_at = nowIso();
-      } else {
-        t.completed = false;
-        t.completed_at = null;
-      }
-
-      addActivity(`Task "${t.title}" advanced to ${getEnum('taskStages', next)?.label || next}.`, { task_id: t.id });
-      showNotification(`Task advanced to ${getEnum('taskStages', next)?.label || next}`, 'success');
-    }
-
-    // NEW: Project status advancement
-    function advanceProjectStatus(projectId) {
-      const p = state.projects.find(x => x.id === projectId);
-      if (!p) return;
-
-      const statuses = ENUMS.projectStatuses.map(s => s.key);
-      const idx = statuses.indexOf(p.status || 'planning');
-      const next = statuses[Math.min(idx + 1, statuses.length - 1)];
-      if (next === p.status) return;
-
-      p.status = next;
-      addActivity(`Project "${p.name}" advanced to ${getEnum('projectStatuses', next)?.label || next}.`, { project_id: p.id });
-      showNotification(`Project advanced to ${getEnum('projectStatuses', next)?.label || next}`, 'success');
-    }
-
-    // ---------- Edit helpers ----------
-    function getRecord(type, id) {
-      if (type === 'contact') return state.contacts.find(x => x.id === id) || null;
-      if (type === 'investor') return state.investors.find(x => x.id === id) || null;
-      if (type === 'deal') return state.deals.find(x => x.id === id) || null;
-      if (type === 'project') return state.projects.find(x => x.id === id) || null;
-      if (type === 'task') return state.tasks.find(x => x.id === id) || null;
-      if (type === 'appointment') return state.appointments.find(x => x.id === id) || null;
-      return null;
-    }
-
-    function updateRecord(type, id, patch) {
-      const r = getRecord(type, id);
-      if (!r) return false;
-      Object.assign(r, patch);
-      return true;
     }
 
     // ---------- Export ----------
@@ -2211,9 +2371,9 @@
       });
 
       const overdue = new Date(Date.now() - 24*60*60*1000);
-      createTask({ title:`Follow up with ${c1.name}`, due_at: overdue.toISOString(), link:{type:'contact', id:c1.id}, stage:'open' });
-      createTask({ title:'Send DD checklist summary', due_at: new Date(Date.now() - 2*24*60*60*1000).toISOString(), link:{type:'deal', id:d2.id}, stage:'in_progress' });
-      createTask({ title:'File LLC documents with state', due_at: new Date(Date.now() - 24*60*60*1000).toISOString(), link:{type:'project', id:p1.id}, stage:'blocked' });
+      createTask({ title:`Follow up with ${c1.name}`, due_at: overdue.toISOString(), link:{type:'contact', id:c1.id} });
+      createTask({ title:'Send DD checklist summary', due_at: new Date(Date.now() - 2*24*60*60*1000).toISOString(), link:{type:'deal', id:d2.id} });
+      createTask({ title:'File LLC documents with state', due_at: new Date(Date.now() - 24*60*60*1000).toISOString(), link:{type:'project', id:p1.id} });
 
       const start = new Date(Date.now() + 2*60*60*1000);
       const end = new Date(Date.now() + 2.5*60*60*1000);
@@ -2228,44 +2388,13 @@
 
     function deleteAllData() {
       for (const k of Object.keys(state)) state[k] = [];
-      localStorage.removeItem(STORAGE_KEY);
+      localStorage.removeItem(getStorageKey());
       showNotification('All data deleted.', 'success');
       renderAll();
       setView('dashboard');
     }
 
-    // ---------- Appointment start/end behavior ----------
-    function syncAppointmentEndWithStart() {
-      const startEl = formMap.appointment.querySelector('[name="startAt"]');
-      const endEl = formMap.appointment.querySelector('[name="endAt"]');
-      if (!startEl || !endEl) return;
-
-      const start = parseMaybeDate(startEl.value);
-      const end = parseMaybeDate(endEl.value);
-
-      if (!start) return;
-
-      // If end is empty, set end = start + 60 minutes
-      if (!end) {
-        const newEnd = new Date(start.getTime() + 60*60*1000);
-        endEl.value = toLocalDateTimeInputValue(newEnd);
-        return;
-      }
-
-      // Force end date to match start date (keep end time)
-      const newEnd = new Date(end.getTime());
-      newEnd.setFullYear(start.getFullYear(), start.getMonth(), start.getDate());
-
-      // If now invalid (end <= start), set to start + 60 minutes
-      if (newEnd <= start) {
-        const fallback = new Date(start.getTime() + 60*60*1000);
-        endEl.value = toLocalDateTimeInputValue(fallback);
-      } else {
-        endEl.value = toLocalDateTimeInputValue(newEnd);
-      }
-    }
-
-    // ---------- Event handling ----------
+    // ---------- Event handling (delegation) ----------
     document.addEventListener('click', (e) => {
       const nav = e.target.closest('[data-nav]');
       if (nav) {
@@ -2294,12 +2423,14 @@
       const action = actionEl.dataset.action;
       const id = actionEl.dataset.id;
 
-      if (action === 'task-advance') {
-        advanceTaskStage(id);
-        saveState();
-        renderAll();
-        return;
-      }
+      // Edit actions
+      if (action === 'contact-edit') { openEditModal('contact', id); return; }
+      if (action === 'investor-edit') { openEditModal('investor', id); return; }
+      if (action === 'deal-edit') { openEditModal('deal', id); return; }
+      if (action === 'project-edit') { openEditModal('project', id); return; }
+      if (action === 'task-edit') { openEditModal('task', id); return; }
+      if (action === 'appointment-edit') { openEditModal('appointment', id); return; }
+
       if (action === 'task-complete') {
         completeTask(id);
         saveState();
@@ -2314,37 +2445,12 @@
         }
         return;
       }
-
-      if (action === 'deal-advance') {
-        advanceDealStage(id);
-        saveState();
-        renderAll();
-        return;
-      }
-
-      if (action === 'project-advance') {
-        advanceProjectStatus(id);
-        saveState();
-        renderAll();
-        return;
-      }
-
       if (action === 'contact-touch') {
         logContactTouch(id);
         saveState();
         renderAll();
         return;
       }
-
-      // EDIT actions
-      if (action === 'contact-edit') { openEditModal('contact', id); return; }
-      if (action === 'investor-edit') { openEditModal('investor', id); return; }
-      if (action === 'deal-edit') { openEditModal('deal', id); return; }
-      if (action === 'project-edit') { openEditModal('project', id); return; }
-      if (action === 'task-edit') { openEditModal('task', id); return; }
-      if (action === 'appointment-edit') { openEditModal('appointment', id); return; }
-
-      // DELETE actions
       if (action === 'contact-delete') {
         if (confirm('Delete this contact (and linked investor profile + linked tasks)?')) {
           deleteById('contacts', id);
@@ -2369,6 +2475,12 @@
         }
         return;
       }
+      if (action === 'deal-advance') {
+        advanceDealStage(id);
+        saveState();
+        renderAll();
+        return;
+      }
       if (action === 'project-delete') {
         if (confirm('Delete this project (and linked tasks)?')) {
           deleteById('projects', id);
@@ -2385,10 +2497,14 @@
         }
         return;
       }
-
-      if (action === 'go-calendar') { setView('calendar'); return; }
-      if (action === 'export') { exportJson(actionEl.dataset.kind); return; }
-
+      if (action === 'go-calendar') {
+        setView('calendar');
+        return;
+      }
+      if (action === 'export') {
+        exportJson(actionEl.dataset.kind);
+        return;
+      }
       if (action === 'clear-activity') {
         if (confirm('Clear all activity log entries?')) {
           state.activities = [];
@@ -2438,16 +2554,67 @@
 
     // ---------- Modal events ----------
     document.getElementById('closeModal').addEventListener('click', closeModal);
+
+
+    // ---------- Auth events ----------
+    if (authBtn) {
+      authBtn.addEventListener('click', async () => {
+        if (!window.firebaseCRM) {
+          showNotification('Firebase not loaded. Check network or hosting.', 'error');
+          return;
+        }
+        if (!isSignedIn) openAuthModal();
+        else {
+          await window.firebaseCRM.signOut();
+          showNotification('Signed out.', 'success');
+        }
+      });
+    }
+
+    if (closeAuthModalBtn) closeAuthModalBtn.addEventListener('click', closeAuthModal);
+    window.addEventListener('click', (event) => { if (event.target === authModal) closeAuthModal(); });
+
+    if (authSignIn) {
+      authSignIn.addEventListener('click', async () => {
+        try {
+          const email = (authEmail.value || '').trim();
+          const pw = authPassword.value || '';
+          if (!email || !pw) return setAuthError('Email and password are required.');
+          setAuthError('');
+          await window.firebaseCRM.signIn(email, pw);
+          closeAuthModal();
+          showNotification('Signed in.', 'success');
+        } catch (e) {
+          setAuthError(e?.message || 'Sign-in failed.');
+        }
+      });
+    }
+
+    if (authCreate) {
+      authCreate.addEventListener('click', async () => {
+        try {
+          const email = (authEmail.value || '').trim();
+          const pw = authPassword.value || '';
+          if (!email || !pw) return setAuthError('Email and password are required.');
+          if (pw.length < 6) return setAuthError('Password must be at least 6 characters.');
+          setAuthError('');
+          await window.firebaseCRM.createAccount(email, pw);
+          closeAuthModal();
+          showNotification('Account created and signed in.', 'success');
+        } catch (e) {
+          setAuthError(e?.message || 'Account creation failed.');
+        }
+      });
+    }
     window.addEventListener('click', (event) => { if (event.target === modal) closeModal(); });
     window.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !modal.classList.contains('hidden')) closeModal(); });
 
     addType.addEventListener('change', (e) => {
-      // changing type cancels edit mode
-      editId.value = "";
+      // Changing types resets edit mode for safety
+      setModalMode('create', e.target.value, null);
       showForm(e.target.value);
     });
 
-    // Dependent link selects
     const taskLinkType = formMap.task.querySelector('[name="linkType"]');
     const taskLinkId = formMap.task.querySelector('[name="linkId"]');
     taskLinkType.addEventListener('change', () => {
@@ -2461,69 +2628,62 @@
     apptLinkType.addEventListener('change', () => {
       const t = apptLinkType.value;
       if (!t) { apptLinkId.classList.add('hidden'); return; }
-      populateLinkIdSelect(apptLinkId, t);
+      populateLinkIdSelect(apptLinkId, t === 'investor' ? 'investor' : t);
     });
 
-    // Appointment start/end sync
-    const apptStart = formMap.appointment.querySelector('[name="startAt"]');
-    if (apptStart) apptStart.addEventListener('change', syncAppointmentEndWithStart);
+    // Appointment end sync behavior
+    const apptStartEl = formMap.appointment.querySelector('[name="startAt"]');
+    const apptEndEl = formMap.appointment.querySelector('[name="endAt"]');
 
-    // Seed Demo button
+    function syncAppointmentEndFromStart(force=false) {
+      const s = parseMaybeDate(apptStartEl.value);
+      const e = parseMaybeDate(apptEndEl.value);
+      if (!s) return;
+
+      if (force || !e || isNaN(e.getTime()) || e <= s) {
+        const newEnd = new Date(s.getTime() + 90*60*1000);
+        apptEndEl.value = toLocalDateTimeInputValue(newEnd);
+      }
+    }
+
+    apptStartEl.addEventListener('change', () => syncAppointmentEndFromStart(false));
+    apptEndEl.addEventListener('change', () => syncAppointmentEndFromStart(false));
+
     document.getElementById('seedDemo').addEventListener('click', () => seedDemoData());
 
-    // Delete all
     document.getElementById('deleteAll').addEventListener('click', () => {
       if (confirm('Delete ALL CRM data stored in this browser?')) deleteAllData();
     });
 
-    // Submit quick add / edit
+    // ---------- Submit create/edit ----------
     document.getElementById('submitQuickAdd').addEventListener('click', () => {
       const type = addType.value;
-      const id = editId.value || "";
       const formEl = formMap[type];
       const data = readFormValues(formEl);
+      const isEdit = (modalMode === 'edit' && editing.type === type && editing.id);
 
       try {
-        const isEdit = !!id;
-
         if (type === 'contact') {
           const name = (data.fullName || "").trim();
           if (!name) return setFormError('Full Name is required.');
           const cadence = clampInt(data.cadenceDays, 0);
           const stage = data.stage || 'warm';
 
+          const patch = {
+            name,
+            email: (data.email||"").trim(),
+            phone: (data.phone||"").trim(),
+            organization: (data.organization||"").trim(),
+            stage,
+            cadence_days: cadence,
+            notes: (data.notes||"").trim()
+          };
+
           if (!isEdit) {
-            createContact({
-              name,
-              email: (data.email||"").trim(),
-              phone: (data.phone||"").trim(),
-              organization: (data.organization||"").trim(),
-              stage,
-              cadence_days: cadence,
-              notes: (data.notes||"").trim()
-            });
+            createContact(patch);
             showNotification('Contact added.', 'success');
           } else {
-            const c = getRecord('contact', id);
-            if (!c) return setFormError('Contact not found.');
-            const patch = {
-              name,
-              email: (data.email||"").trim(),
-              phone: (data.phone||"").trim(),
-              organization: (data.organization||"").trim(),
-              stage,
-              cadence_days: cadence,
-              notes: (data.notes||"").trim()
-            };
-            // If cadence changed, recompute next touch based on last touch (or now)
-            Object.assign(c, patch);
-            if (c.cadence_days) {
-              if (!c.last_touch_at) c.last_touch_at = nowIso();
-              ensureCadence(c);
-            } else {
-              c.next_touch_due_at = null;
-            }
-            addActivity(`Contact updated: ${c.name}`, { contact_id: c.id });
+            updateContact(editing.id, patch);
             showNotification('Contact updated.', 'success');
           }
         }
@@ -2537,8 +2697,8 @@
             contact_id: contactId,
             type: data.investorType || 'hnwi',
             stage: data.investorStage || 'prospect',
-            check_min: (data.checkMin !== '' ? Number(data.checkMin) : null),
-            check_max: (data.checkMax !== '' ? Number(data.checkMax) : null),
+            check_min: data.checkMin || null,
+            check_max: data.checkMax || null,
             thesis: (data.thesis||"").trim(),
             preferences: (data.preferences||"").trim()
           };
@@ -2547,10 +2707,7 @@
             createInvestor(patch);
             showNotification('Investor added.', 'success');
           } else {
-            const inv = getRecord('investor', id);
-            if (!inv) return setFormError('Investor not found.');
-            Object.assign(inv, patch);
-            addActivity(`Investor updated.`, { investor_id: inv.id, contact_id: inv.contact_id });
+            updateInvestor(editing.id, patch);
             showNotification('Investor updated.', 'success');
           }
         }
@@ -2566,24 +2723,15 @@
             type: data.dealType || 'multifamily',
             stage,
             close_target_date: close ? close.toISOString() : null,
-            amount: (data.amount !== '' ? Number(data.amount) : null),
+            amount: data.amount || null,
             notes: (data.dealNotes||"").trim()
           };
 
           if (!isEdit) {
-            const d = createDeal(patch);
+            createDeal(patch);
             showNotification('Deal added.', 'success');
           } else {
-            const d = getRecord('deal', id);
-            if (!d) return setFormError('Deal not found.');
-            const priorStage = d.stage;
-            Object.assign(d, patch);
-            addActivity(`Deal updated: ${d.name}`, { deal_id: d.id });
-
-            // If stage newly becomes due_diligence, generate checklist once
-            if (priorStage !== 'due_diligence' && d.stage === 'due_diligence') {
-              generateDDChecklist(d);
-            }
+            updateDeal(editing.id, patch);
             showNotification('Deal updated.', 'success');
           }
         }
@@ -2605,10 +2753,7 @@
             createProject(patch);
             showNotification('Project added.', 'success');
           } else {
-            const p = getRecord('project', id);
-            if (!p) return setFormError('Project not found.');
-            Object.assign(p, patch);
-            addActivity(`Project updated: ${p.name}`, { project_id: p.id });
+            updateProject(editing.id, patch);
             showNotification('Project updated.', 'success');
           }
         }
@@ -2616,24 +2761,20 @@
         if (type === 'task') {
           const title = (data.taskTitle || "").trim();
           if (!title) return setFormError('Task Title is required.');
-
           const due = parseMaybeDate(data.taskDue);
           let link = null;
+
           const lt = data.linkType || "";
           if (lt) {
-            const lid = data.linkId;
-            if (lid) link = { type: lt, id: lid };
+            const id = data.linkId;
+            if (id) link = { type: lt, id };
           }
 
-          const stage = data.taskStage || 'open';
           const patch = {
             title,
             description: (data.taskDesc||"").trim(),
             due_at: due ? due.toISOString() : null,
-            link,
-            stage,
-            completed: stage === 'done',
-            completed_at: stage === 'done' ? (nowIso()) : null
+            link
           };
 
           if (!isEdit) {
@@ -2641,10 +2782,7 @@
             addActivity(`Task created: ${title}`, {});
             showNotification('Task added.', 'success');
           } else {
-            const t = getRecord('task', id);
-            if (!t) return setFormError('Task not found.');
-            Object.assign(t, patch);
-            addActivity(`Task updated: ${t.title}`, { task_id: t.id });
+            updateTask(editing.id, patch);
             showNotification('Task updated.', 'success');
           }
         }
@@ -2655,15 +2793,22 @@
 
           const start = parseMaybeDate(data.startAt);
           const end = parseMaybeDate(data.endAt);
+
           if (!start) return setFormError('Start time is required.');
           if (!end) return setFormError('End time is required.');
-          if (end <= start) return setFormError('End time must be after start time.');
+
+          // Enforce end > start (auto-fix if needed)
+          if (end <= start) {
+            const bumped = new Date(start.getTime() + 90*60*1000);
+            setFormValues(formMap.appointment, { endAt: bumped.toISOString() });
+            return setFormError('End time must be after start time (adjusted to +90 minutes).');
+          }
 
           let link = null;
           const lt = data.apptLinkType || "";
           if (lt) {
-            const lid = data.apptLinkId;
-            if (lid) link = { type: lt, id: lid };
+            const id = data.apptLinkId;
+            if (id) link = { type: lt, id };
           }
 
           const patch = {
@@ -2679,11 +2824,7 @@
             createAppointment(patch);
             showNotification('Appointment added.', 'success');
           } else {
-            const a = getRecord('appointment', id);
-            if (!a) return setFormError('Appointment not found.');
-            Object.assign(a, patch);
-            // Do not create a new prep task on edit
-            addActivity(`Appointment updated: ${a.title}`, { appointment_id: a.id });
+            updateAppointment(editing.id, patch);
             showNotification('Appointment updated.', 'success');
           }
         }
@@ -2704,19 +2845,43 @@
       const ok = loadState();
       if (!ok) saveState();
 
-      const changed = migrateTasksToStages();
-      if (changed) saveState();
-
       populateFormSelects('contact');
-
       renderAll();
       setView('dashboard');
+
+      // Attach auth listener (enables cloud sync when signed in)
+      if (window.firebaseCRM?.onAuth) {
+        window.firebaseCRM.onAuth(async (user) => {
+          updateAuthUI(user);
+
+          // When a user signs in, switch localStorage namespace and pull cloud state (if present).
+          if (user) {
+            cloudReady = true;
+            // Reload local user-scoped state first (if any), then pull cloud.
+            loadState();
+            renderAll();
+            await cloudSyncPullIfAvailable();
+
+            // If cloud is empty, push current local state up on first sign-in.
+            const existing = await window.firebaseCRM.cloudLoad();
+            if (!existing || !existing.state) {
+              await window.firebaseCRM.cloudSave(state);
+              showNotification('Cloud sync: initialized from local data.', 'success');
+            }
+          } else {
+            cloudReady = false;
+          }
+        });
+      } else {
+        updateAuthUI(null);
+      }
+
 
       if (!state.contacts.length && !state.deals.length && !state.tasks.length && !state.projects.length && !state.investors.length) {
         showNotification('Tip: Click "Seed Demo Data" in Quick Add modal.', 'info');
       }
 
-      console.log('DealFlow Pro v1 loaded. Data stored in localStorage key:', STORAGE_KEY);
+      console.log('DealFlow Pro v1 loaded. Data stored in localStorage key:', getStorageKey());
     }
 
     init();
