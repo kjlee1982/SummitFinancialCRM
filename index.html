@@ -838,6 +838,7 @@
 
   // Auth
   window.firebaseCRM.getUid = () => auth.currentUser?.uid ?? null;
+  window.firebaseCRM.getEmail = () => auth.currentUser?.email ?? null;
   window.firebaseCRM.onAuth = (cb) => onAuthStateChanged(auth, cb);
   window.firebaseCRM.signIn = (email, pass) => signInWithEmailAndPassword(auth, email, pass);
   window.firebaseCRM.createAccount = (email, pass) => createUserWithEmailAndPassword(auth, email, pass);
@@ -1878,6 +1879,16 @@
         authBtn.classList.toggle('hover:bg-red-700', !!user);
       }
     }
+    // Defensive: if auth restores after initial render, keep header in sync.
+    function syncAuthUIFromCurrentUser() {
+      try {
+        const uid = window.firebaseCRM?.getUid?.();
+        const email = window.firebaseCRM?.getEmail?.();
+        if (uid) updateAuthUI({ uid, email });
+      } catch (_) {}
+    }
+
+
 
 
     // Initialize auth UI immediately if Firebase is already available.
@@ -2554,6 +2565,16 @@
       saveState();
       renderAll();
       setView('dashboard');
+
+      // Sync header from auth.currentUser in case auth restores after initial render.
+      syncAuthUIFromCurrentUser();
+      // Try a few times during startup to catch delayed auth restore.
+      let __authSyncTries = 0;
+      const __authSyncTimer = setInterval(() => {
+        __authSyncTries++;
+        syncAuthUIFromCurrentUser();
+        if (__authSyncTries >= 10) clearInterval(__authSyncTimer);
+      }, 500);
     }
 
     function deleteAllData() {
