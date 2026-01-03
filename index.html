@@ -1882,6 +1882,102 @@
       }
     } catch (_) {}
 
+    
+    // ---------- Auth state binding + cross-device reconciliation ----------
+    async function reconcileLocalAndCloud(user) {
+      // Ensure UI reflects current auth state.
+      try { updateAuthUI(user); } catch (_) {}
+
+      // Reload local state for the current auth context (storage key changes with uid).
+      const hadLocal = !!localStorage.getItem(getStorageKey());
+      const loaded = loadState(); // loads from correct key (base or per-uid)
+      if (loaded) renderAll();
+
+      // If not signed in, nothing to reconcile with cloud.
+      if (!user || !window.firebaseCRM?.cloudLoad || !window.firebaseCRM?.cloudSave) return;
+
+      // Compare local vs cloud freshness.
+      const meta = loadMeta();
+      const localMs = Number(meta?.local_updated_ms || 0);
+
+      let payload = null;
+      try {
+        payload = await window.firebaseCRM.cloudLoad();
+      } catch (e) {
+        console.warn('Cloud load failed:', e);
+        return;
+      }
+
+      const cloudState = payload?.state || null;
+      const cloudMs = payload?.updated_at?.toMillis ? payload.updated_at.toMillis() : 0;
+
+      // Helper: pull cloud -> local
+      const pullCloud = () => {
+        if (!cloudState) return false;
+        for (const k of Object.keys(state)) {
+          if (Array.isArray(state[k]) && Array.isArray(cloudState[k])) state[k] = cloudState[k];
+        }
+        saveStateLocalOnly(); // updates local_updated_ms
+        renderAll();
+        addActivity('Cloud sync: pulled data from Firestore.', { source: 'firestore' });
+        saveStateLocalOnly();
+        renderActivity();
+        return true;
+      };
+
+      // Helper: push local -> cloud
+      const pushLocal = async () => {
+        try {
+          await window.firebaseCRM.cloudSave(state);
+          addActivity('Cloud sync: pushed local data to Firestore.', { source: 'firestore' });
+          saveStateLocalOnly();
+          renderActivity();
+          return true;
+        } catch (e) {
+          console.warn('Cloud save failed:', e);
+          return false;
+        }
+      };
+
+      // Decision:
+      // - If cloud empty and we have any local data (or even empty state), seed cloud.
+      // - If local is newer than cloud, push local.
+      // - If cloud is newer than local, pull cloud.
+      // - If no local data but cloud exists, pull cloud.
+      // - Otherwise do nothing.
+      if (!cloudState) {
+        // If we have any local state stored for this uid (or hadLocal), seed cloud so other devices can see it.
+        if (hadLocal || loaded) await pushLocal();
+        return;
+      }
+
+      if (!loaded && cloudState) {
+        pullCloud();
+        return;
+      }
+
+      if (localMs >= cloudMs) {
+        // Local is same/newer -> make cloud match.
+        await pushLocal();
+      } else {
+        // Cloud newer -> pull it.
+        pullCloud();
+      }
+    }
+
+    // Bind to Firebase auth state if available; this prevents "refresh loads base localStorage" issues.
+    try {
+      if (window.firebaseCRM?.onAuth) {
+        window.firebaseCRM.onAuth(async (user) => {
+          isSignedIn = !!user;
+          await reconcileLocalAndCloud(user);
+        });
+      }
+    } catch (e) {
+      console.warn('Auth binding failed:', e);
+    }
+
+
     async function cloudSyncPullIfAvailable() {
       if (!window.firebaseCRM?.cloudLoad) return { pulled: false, cloud_ms: 0 };
       const payload = await window.firebaseCRM.cloudLoad();
