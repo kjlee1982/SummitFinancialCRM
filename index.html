@@ -2964,6 +2964,10 @@
               try {
                 await window.firebaseCRM.cloudSave(state);
                 showNotification('Cloud sync: initialized from local data.', 'success');
+              } catch (e) {
+                console.warn('Cloud save failed:', e);
+                showNotification('Cloud sync: init failed (see console).', 'warning');
+              }
             }
           } else {
             cloudReady = false;
@@ -2985,3 +2989,8 @@
   </script>
 </body>
 </html>
+
+
+
+
+
