@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>DealFlow Pro - CRM (Working v1)</title>
+  <title>DealFlow Pro - CRM (Working v1) (v1.4.5)</title>
 
   <!-- Tailwind (prototype CDN) -->
   <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
@@ -77,7 +77,7 @@
         <h1 class="text-2xl font-bold text-white flex items-center">
           <i class="fas fa-chart-network mr-2"></i> DealFlow Pro
         </h1>
-        <p class="text-sm text-gray-400 mt-1">CRM v1 (local only)</p>
+        <p class="text-sm text-gray-400 mt-1">CRM v1.4.5 (cloud sync)</p>
       </div>
 
       <nav class="flex-1 px-4">
@@ -855,6 +855,10 @@
 </script>
 
 <script>
+  // Boot marker
+  window.__DEALFLOW_VERSION__ = "1.4.5";
+  console.log("DealFlow Pro boot OK v1.4.5");
+
     /*****************************************************************
      * Working v1 CRM - Single-file, localStorage persistence.
      * Enhancements:
