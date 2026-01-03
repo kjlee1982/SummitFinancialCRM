@@ -849,10 +849,16 @@
 
     // ---------- Utilities ----------
     const BASE_STORAGE_KEY = "dealflowpro_state_v1";
+    const BASE_META_KEY = "dealflowpro_meta_v1";
 
     function getStorageKey() {
       const uid = window.firebaseCRM?.getUid?.();
       return uid ? `${BASE_STORAGE_KEY}_${uid}` : BASE_STORAGE_KEY;
+    }
+
+    function getMetaKey() {
+      const uid = window.firebaseCRM?.getUid?.();
+      return uid ? `${BASE_META_KEY}_${uid}` : BASE_META_KEY;
     }
 
     function uid(prefix="id") {
@@ -998,6 +1004,23 @@
       activities: []
     };
 
+    function loadMeta() {
+      const raw = localStorage.getItem(getMetaKey());
+      if (!raw) return { local_updated_ms: 0 };
+      try {
+        const meta = JSON.parse(raw);
+        return {
+          local_updated_ms: Number(meta.local_updated_ms) || 0
+        };
+      } catch {
+        return { local_updated_ms: 0 };
+      }
+    }
+
+    function saveMeta(meta) {
+      localStorage.setItem(getMetaKey(), JSON.stringify(meta));
+    }
+
     function loadState() {
       const raw = localStorage.getItem(getStorageKey());
       if (!raw) return false;
@@ -1012,8 +1035,15 @@
       }
     }
 
-    function saveState() {
+    function saveStateLocalOnly() {
       localStorage.setItem(getStorageKey(), JSON.stringify(state));
+      const meta = loadMeta();
+      meta.local_updated_ms = Date.now();
+      saveMeta(meta);
+    }
+
+    function saveState() {
+      saveStateLocalOnly();
       cloudSaveDebounced();
     }
 
@@ -1820,15 +1850,28 @@
     }
 
     async function cloudSyncPullIfAvailable() {
-      if (!window.firebaseCRM?.cloudLoad) return;
+      if (!window.firebaseCRM?.cloudLoad) return { pulled: false, cloud_ms: 0 };
       const payload = await window.firebaseCRM.cloudLoad();
-      if (!payload || !payload.state) return;
+      if (!payload || !payload.state) return { pulled: false, cloud_ms: 0 };
 
-      // Replace local in-memory state with cloud state.
       const cloudState = payload.state;
       for (const k of Object.keys(state)) {
         if (Array.isArray(state[k]) && Array.isArray(cloudState[k])) state[k] = cloudState[k];
       }
+
+      // Convert Firestore Timestamp -> ms if present
+      const cloudMs = payload.updated_at?.toMillis ? payload.updated_at.toMillis() : 0;
+
+      // Persist locally without triggering a cloud write-back.
+      saveStateLocalOnly();
+      renderAll();
+      addActivity('Cloud sync: pulled data from Firestore.', { source: 'firestore' });
+      saveStateLocalOnly();
+      renderActivity();
+      showNotification('Cloud sync: data loaded.', 'success');
+
+      return { pulled: true, cloud_ms: cloudMs };
+    }
 
       // Persist locally under the per-user key and re-render.
       saveState();
@@ -2854,17 +2897,44 @@
         window.firebaseCRM.onAuth(async (user) => {
           updateAuthUI(user);
 
-          // When a user signs in, switch localStorage namespace and pull cloud state (if present).
+          // When a user signs in, switch localStorage namespace and reconcile local vs cloud.
           if (user) {
             cloudReady = true;
-            // Reload local user-scoped state first (if any), then pull cloud.
+
+            // Load any existing local state for this UID (offline cache).
             loadState();
             renderAll();
-            await cloudSyncPullIfAvailable();
 
-            // If cloud is empty, push current local state up on first sign-in.
-            const existing = await window.firebaseCRM.cloudLoad();
-            if (!existing || !existing.state) {
+            // Pull cloud (if present)
+            const cloudPayload = await window.firebaseCRM.cloudLoad();
+            const cloudHas = !!(cloudPayload && cloudPayload.state);
+            const cloudMs = cloudPayload?.updated_at?.toMillis ? cloudPayload.updated_at.toMillis() : 0;
+
+            const meta = loadMeta();
+            const localMs = Number(meta.local_updated_ms) || 0;
+
+            if (cloudHas) {
+              // Last-write-wins based on timestamps.
+              if (cloudMs > localMs) {
+                // Cloud is newer: apply cloud -> local.
+                const cloudState = cloudPayload.state;
+                for (const k of Object.keys(state)) {
+                  if (Array.isArray(state[k]) && Array.isArray(cloudState[k])) state[k] = cloudState[k];
+                }
+                meta.local_updated_ms = cloudMs;
+                saveMeta(meta);
+                saveStateLocalOnly();
+                renderAll();
+                showNotification('Cloud sync: pulled newer data.', 'success');
+              } else if (localMs > cloudMs + 2000) {
+                // Local is newer: push local -> cloud.
+                await window.firebaseCRM.cloudSave(state);
+                showNotification('Cloud sync: pushed newer local data.', 'success');
+              } else {
+                // Roughly equal: do nothing.
+              }
+            } else {
+              // Cloud is empty: initialize from local.
               await window.firebaseCRM.cloudSave(state);
               showNotification('Cloud sync: initialized from local data.', 'success');
             }
