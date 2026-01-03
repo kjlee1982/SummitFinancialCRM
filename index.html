@@ -77,7 +77,7 @@
         <h1 class="text-2xl font-bold text-white flex items-center">
           <i class="fas fa-chart-network mr-2"></i> DealFlow Pro
         </h1>
-        <p class="text-sm text-gray-400 mt-1">CRM v1.4.5 (cloud sync)</p>
+        <p class="text-sm text-gray-400 mt-1">CRM v1.4.6 (cloud sync)</p>
       </div>
 
       <nav class="flex-1 px-4">
@@ -857,7 +857,7 @@
 <script>
   // Boot marker
   window.__DEALFLOW_VERSION__ = "1.4.5";
-  console.log("DealFlow Pro boot OK v1.4.5");
+  console.log("DealFlow Pro boot OK v1.4.6");
 
     /*****************************************************************
      * Working v1 CRM - Single-file, localStorage persistence.
@@ -2458,130 +2458,155 @@
     }
 
     // ---------- Event handling (delegation) ----------
-    document.addEventListener('click', (e) => {
-      const navlink = e.target.closest('[data-navlink]');
-      if (navlink) {
-        e.preventDefault();
-        setView(navlink.dataset.navlink);
-        return;
-      }
+// Mobile browsers sometimes delay/suppress 'click' in certain edge cases; bind both.
+function handleDelegatedEvent(e) {
+  try {
+    const t = e.target;
 
-      const open = e.target.closest('[data-open-quickadd]');
-      if (open) {
-        e.preventDefault();
-        openModal(open.dataset.openQuickadd);
-        return;
-      }
+    // Sidebar navigation
+    const nav = t.closest('[data-nav]');
+    if (nav) {
+      e.preventDefault();
+      setView(nav.dataset.nav);
+      return;
+    }
 
-      const actionEl = e.target.closest('[data-action]');
-      if (!actionEl) return;
+    // Inline nav links (e.g., dashboard quick links)
+    const navlink = t.closest('[data-navlink]');
+    if (navlink) {
+      e.preventDefault();
+      setView(navlink.dataset.navlink);
+      return;
+    }
 
-      const action = actionEl.dataset.action;
-      const id = actionEl.dataset.id;
+    // Quick add buttons (top bar + sidebar)
+    const open = t.closest('[data-open-quickadd]');
+    if (open) {
+      e.preventDefault();
+      openModal(open.dataset.openQuickadd);
+      return;
+    }
 
-      // Edit actions
-      if (action === 'contact-edit') { openEditModal('contact', id); return; }
-      if (action === 'investor-edit') { openEditModal('investor', id); return; }
-      if (action === 'deal-edit') { openEditModal('deal', id); return; }
-      if (action === 'project-edit') { openEditModal('project', id); return; }
-      if (action === 'task-edit') { openEditModal('task', id); return; }
-      if (action === 'appointment-edit') { openEditModal('appointment', id); return; }
+    // Action buttons throughout the app
+    const actionEl = t.closest('[data-action]');
+    if (!actionEl) return;
 
-      if (action === 'task-complete') {
-        completeTask(id);
+    e.preventDefault();
+
+    const action = actionEl.dataset.action;
+    const id = actionEl.dataset.id;
+
+    // Edit actions
+    if (action === 'contact-edit') { openEditModal('contact', id); return; }
+    if (action === 'investor-edit') { openEditModal('investor', id); return; }
+    if (action === 'deal-edit') { openEditModal('deal', id); return; }
+    if (action === 'project-edit') { openEditModal('project', id); return; }
+    if (action === 'task-edit') { openEditModal('task', id); return; }
+    if (action === 'appointment-edit') { openEditModal('appointment', id); return; }
+
+    if (action === 'task-complete') {
+      completeTask(id);
+      saveState();
+      renderAll();
+      return;
+    }
+    if (action === 'task-delete') {
+      if (confirm('Delete this task?')) {
+        deleteById('tasks', id);
         saveState();
         renderAll();
-        return;
       }
-      if (action === 'task-delete') {
-        if (confirm('Delete this task?')) {
-          deleteById('tasks', id);
-          saveState();
-          renderAll();
-        }
-        return;
-      }
-      if (action === 'contact-touch') {
-        logContactTouch(id);
+      return;
+    }
+    if (action === 'contact-touch') {
+      logContactTouch(id);
+      saveState();
+      renderAll();
+      return;
+    }
+    if (action === 'contact-delete') {
+      if (confirm('Delete this contact (and linked investor profile + linked tasks)?')) {
+        deleteById('contacts', id);
         saveState();
         renderAll();
-        return;
       }
-      if (action === 'contact-delete') {
-        if (confirm('Delete this contact (and linked investor profile + linked tasks)?')) {
-          deleteById('contacts', id);
-          saveState();
-          renderAll();
-        }
-        return;
-      }
-      if (action === 'investor-delete') {
-        if (confirm('Delete this investor profile?')) {
-          deleteById('investors', id);
-          saveState();
-          renderAll();
-        }
-        return;
-      }
-      if (action === 'deal-delete') {
-        if (confirm('Delete this deal (and linked tasks)?')) {
-          deleteById('deals', id);
-          saveState();
-          renderAll();
-        }
-        return;
-      }
-      if (action === 'deal-advance') {
-        advanceDealStage(id);
+      return;
+    }
+    if (action === 'investor-delete') {
+      if (confirm('Delete this investor profile?')) {
+        deleteById('investors', id);
         saveState();
         renderAll();
-        return;
       }
-      if (action === 'project-delete') {
-        if (confirm('Delete this project (and linked tasks)?')) {
-          deleteById('projects', id);
-          saveState();
-          renderAll();
-        }
-        return;
+      return;
+    }
+    if (action === 'deal-delete') {
+      if (confirm('Delete this deal (and linked tasks)?')) {
+        deleteById('deals', id);
+        saveState();
+        renderAll();
       }
-      if (action === 'appointment-delete') {
-        if (confirm('Delete this appointment?')) {
-          deleteById('appointments', id);
-          saveState();
-          renderAll();
-        }
-        return;
+      return;
+    }
+    if (action === 'deal-advance') {
+      advanceDealStage(id);
+      saveState();
+      renderAll();
+      return;
+    }
+    if (action === 'project-delete') {
+      if (confirm('Delete this project (and linked tasks)?')) {
+        deleteById('projects', id);
+        saveState();
+        renderAll();
       }
-      if (action === 'go-calendar') {
-        setView('calendar');
-        return;
+      return;
+    }
+    if (action === 'appointment-delete') {
+      if (confirm('Delete this appointment?')) {
+        deleteById('appointments', id);
+        saveState();
+        renderAll();
       }
-      if (action === 'export') {
-        exportJson(actionEl.dataset.kind);
-        return;
+      return;
+    }
+    if (action === 'go-calendar') {
+      setView('calendar');
+      return;
+    }
+    if (action === 'export') {
+      exportJson(actionEl.dataset.kind);
+      return;
+    }
+    if (action === 'clear-activity') {
+      if (confirm('Clear all activity log entries?')) {
+        state.activities = [];
+        saveState();
+        renderAll();
+        showNotification('Activity cleared.', 'success');
       }
-      if (action === 'clear-activity') {
-        if (confirm('Clear all activity log entries?')) {
-          state.activities = [];
-          saveState();
-          renderAll();
-          showNotification('Activity cleared.', 'success');
-        }
-        return;
+      return;
+    }
+    if (action === 'nav') {
+      setView(actionEl.dataset.view);
+      return;
+    }
+    if (action === 'reset-demo') {
+      if (confirm('Reset ALL data to demo seed? This deletes current data.')) {
+        deleteAllData();
+        seedDemoData();
       }
-      if (action === 'nav') {
-        setView(actionEl.dataset.view);
-        return;
-      }
-      if (action === 'reset-demo') {
-        if (confirm('Reset ALL data to demo seed? This deletes current data.')) {
-          deleteAllData();
-          seedDemoData();
-        }
-        return;
-      }
-    });
+      return;
+    }
+  } catch (err) {
+    console.error('Delegated handler error:', err);
+    showNotification('UI error (see console).', 'error');
+  }
+}
+
+document.addEventListener('click', handleDelegatedEvent, true);
+document.addEventListener('touchend', handleDelegatedEvent, true);
+
 
     // ---------- Filters / search inputs ----------
 
