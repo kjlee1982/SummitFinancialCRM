@@ -820,7 +820,7 @@
   await setPersistence(auth, browserLocalPersistence);
 
   // One document per user (fastest cross-device sync path)
-  const userDocRef = (uid) => doc(db, "crm_users", uid);
+  const userDocRef = (uid) => doc(db, "users", uid, "crm", "state");
 
   // Bridge for the non-module CRM script below.
   window.firebaseCRM = window.firebaseCRM || {};
@@ -2921,7 +2921,13 @@
             renderAll();
 
             // Pull cloud (if present)
-            const cloudPayload = await window.firebaseCRM.cloudLoad();
+            let cloudPayload = null;
+            try {
+              cloudPayload = await window.firebaseCRM.cloudLoad();
+            } catch (e) {
+              console.warn('Cloud load failed:', e);
+              showNotification('Cloud sync: load failed (see console).', 'warning');
+            }
             const cloudHas = !!(cloudPayload && cloudPayload.state);
             const cloudMs = cloudPayload?.updated_at?.toMillis ? cloudPayload.updated_at.toMillis() : 0;
 
@@ -2943,15 +2949,21 @@
                 showNotification('Cloud sync: pulled newer data.', 'success');
               } else if (localMs > cloudMs + 2000) {
                 // Local is newer: push local -> cloud.
-                await window.firebaseCRM.cloudSave(state);
-                showNotification('Cloud sync: pushed newer local data.', 'success');
+                try {
+                  await window.firebaseCRM.cloudSave(state);
+                  showNotification('Cloud sync: pushed newer local data.', 'success');
+                } catch (e) {
+                  console.warn('Cloud save failed:', e);
+                  showNotification('Cloud sync: push failed (see console).', 'warning');
+                }
               } else {
                 // Roughly equal: do nothing.
               }
             } else {
               // Cloud is empty: initialize from local.
-              await window.firebaseCRM.cloudSave(state);
-              showNotification('Cloud sync: initialized from local data.', 'success');
+              try {
+                await window.firebaseCRM.cloudSave(state);
+                showNotification('Cloud sync: initialized from local data.', 'success');
             }
           } else {
             cloudReady = false;
@@ -2973,8 +2985,3 @@
   </script>
 </body>
 </html>
-
-
-
-
-
