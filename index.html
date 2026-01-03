@@ -819,11 +819,18 @@
   const db = getFirestore(app);
 
   // Persist sign-in across refresh/relaunch (GitHub Pages included)
-  await setPersistence(auth, indexedDBLocalPersistence,
-    browserLocalPersistence,
-    browserSessionPersistence);
-
-  // One document per user (fastest cross-device sync path)
+  // Firebase setPersistence accepts a SINGLE persistence implementation.
+  // Some environments block IndexedDB; fall back gracefully.
+  const _persistences = [indexedDBLocalPersistence, browserLocalPersistence, browserSessionPersistence];
+  for (const p of _persistences) {
+    try {
+      await setPersistence(auth, p);
+      break;
+    } catch (e) {
+      // try next persistence option
+    }
+  }
+// One document per user (fastest cross-device sync path)
   const userDocRef = (uid) => doc(db, "users", uid, "crm", "state");
 
   // Bridge for the non-module CRM script below.
@@ -860,8 +867,8 @@
 
 <script>
   // Boot marker
-  window.__DEALFLOW_VERSION__ = "1.4.5";
-  console.log("DealFlow Pro boot OK v1.4.6");
+  window.__DEALFLOW_VERSION__ = "1.4.9";
+  console.log("DealFlow Pro boot OK v1.4.9");
 
     /*****************************************************************
      * Working v1 CRM - Single-file, localStorage persistence.
