@@ -1987,8 +1987,13 @@
     try {
       if (window.firebaseCRM?.onAuth) {
         window.firebaseCRM.onAuth(async (user) => {
-          isSignedIn = !!user;
-          await reconcileLocalAndCloud(user);
+          // Some hosts/browsers can momentarily deliver a null `user` even when auth.currentUser is already restored.
+          // Treat Firebase as the source of truth and derive an effective user from the live auth getters.
+          const uid = window.firebaseCRM?.getUid?.();
+          const email = window.firebaseCRM?.getEmail?.();
+          const effectiveUser = uid ? { uid, email } : null;
+          isSignedIn = !!effectiveUser;
+          await reconcileLocalAndCloud(effectiveUser);
         });
       }
     } catch (e) {
@@ -2576,6 +2581,33 @@
         if (__authSyncTries >= 10) clearInterval(__authSyncTimer);
       }, 500);
     }
+
+    // Long-lived auth/UI/state watcher:
+    // If auth restores *after* initial startup window, ensure we (1) flip UI to signed-in,
+    // (2) reload the per-uid local state, and (3) reconcile with cloud once.
+    let __dealflowLastUid = null;
+    let __dealflowReconciling = false;
+    setInterval(async () => {
+      try {
+        const uid = window.firebaseCRM?.getUid?.() || null;
+        const email = window.firebaseCRM?.getEmail?.() || null;
+
+        if (uid && uid !== __dealflowLastUid) {
+          __dealflowLastUid = uid;
+          // Force UI to signed-in immediately.
+          try { updateAuthUI({ uid, email }); } catch (_) {}
+          // Reload local state for this uid and reconcile once.
+          if (!__dealflowReconciling) {
+            __dealflowReconciling = true;
+            try { await reconcileLocalAndCloud({ uid, email }); } catch (_) {}
+            __dealflowReconciling = false;
+          }
+        }
+
+        // If we truly have no uid, keep lastUid null (but do not overwrite signed-in UI if uid exists).
+        if (!uid) __dealflowLastUid = null;
+      } catch (_) {}
+    }, 1000);
 
     function deleteAllData() {
       for (const k of Object.keys(state)) state[k] = [];
