@@ -114,7 +114,7 @@
           <img src="https://ui-avatars.com/api/?name=Admin+User&background=6366f1&color=fff" alt="Avatar" class="w-8 h-8 rounded-full">
           <div class="ml-3">
             <p class="text-sm font-medium text-white">Admin User</p>
-            <p class="text-xs text-gray-400">Local mode</p>
+            // <p class="text-xs text-gray-400">Local mode</p>
           </div>
         </div>
       </div>
@@ -1931,7 +1931,7 @@
 
     function updateAuthUI(user) {
       isSignedIn = !!user;
-      const label = user ? `Signed in: ${user.email || 'account'}` : 'Local mode';
+      const label = user ? `Signed in: ${user.email || 'account'}`; // : 'Local mode';
       if (authStatus) authStatus.textContent = label;
 
       if (authBtn) {
@@ -3237,7 +3237,7 @@ document.addEventListener('touchend', handleDelegatedEvent, true);
         showNotification('Tip: Click "Seed Demo Data" in Quick Add modal.', 'info');
       }
 
-      console.log('DealFlow Pro v1.5.6 loaded. Data stored in localStorage key:', getStorageKey());
+      console.log('DealFlow Pro v1.5.6 loaded.', getStorageKey());
     }
 
     init();
