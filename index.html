@@ -78,7 +78,7 @@
         <h1 class="text-2xl font-bold text-white flex items-center">
           <i class="fas fa-chart-network mr-2"></i> DealFlow Pro
         </h1>
-        <p id="appVersion" class="text-sm text-gray-400 mt-1">CRM 1.5.6.1</p>
+        <p id="appVersion" class="text-sm text-gray-400 mt-1">CRM</p>
       </div>
 
       <nav class="flex-1 px-4">
@@ -114,6 +114,7 @@
           <img src="https://ui-avatars.com/api/?name=Admin+User&background=6366f1&color=fff" alt="Avatar" class="w-8 h-8 rounded-full">
           <div class="ml-3">
             <p class="text-sm font-medium text-white">Admin User</p>
+            <p class="text-xs text-gray-400">Local mode</p>
           </div>
         </div>
       </div>
@@ -1930,7 +1931,7 @@
 
     function updateAuthUI(user) {
       isSignedIn = !!user;
-      const label = user ? `Signed in: ${user.email || 'account'}`; // : 'Local mode';
+      const label = user ? `Signed in: ${user.email || 'account'}` : 'Local mode';
       if (authStatus) authStatus.textContent = label;
 
       if (authBtn) {
@@ -3236,15 +3237,10 @@ document.addEventListener('touchend', handleDelegatedEvent, true);
         showNotification('Tip: Click "Seed Demo Data" in Quick Add modal.', 'info');
       }
 
-      console.log('DealFlow Pro v1.5.6 loaded.', getStorageKey());
+      console.log('DealFlow Pro v1.5.6 loaded. Data stored in localStorage key:', getStorageKey());
     }
 
     init();
   </script>
 </body>
 </html>
-
-
-
-
-
