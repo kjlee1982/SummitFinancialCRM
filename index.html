@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>DealFlow Pro - CRM (Working v1.5.8)</title>
+  <title>Summit - CRM (Working v1.5.9)</title>
 
   <!-- Tailwind (prototype CDN) -->
   <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
@@ -76,7 +76,7 @@
     <div class="sidebar w-64 bg-gray-900 text-gray-300 flex flex-col">
       <div class="p-6">
         <h1 class="text-2xl font-bold text-white flex items-center">
-          <i class="fas fa-chart-network mr-2"></i> DealFlow Pro
+          <i class="fas fa-chart-network mr-2"></i> Summit CRM
         </h1>
         <p id="appVersion" class="text-sm text-gray-400 mt-1">CRM</p>
       </div>
@@ -111,10 +111,10 @@
 
       <div class="p-4 border-t border-gray-800">
         <div class="flex items-center">
-          <img id="sidebarAvatar" src="https://ui-avatars.com/api/?name=Admin+User&background=6366f1&color=fff" alt="Avatar" class="w-8 h-8 rounded-full">
+          <img src="https://ui-avatars.com/api/?name=Admin+User&background=6366f1&color=fff" alt="Avatar" class="w-8 h-8 rounded-full">
           <div class="ml-3">
-            <p id="sidebarUserName" class="text-sm font-medium text-white">Admin User</p>
-            <p id="sidebarUserMode" class="text-xs text-gray-400">Local mode</p>
+            <p class="text-sm font-medium text-white">Admin User</p>
+            <p class="text-xs text-gray-400">Local mode</p>
           </div>
         </div>
       </div>
@@ -541,9 +541,6 @@
               <button class="px-4 py-2 bg-gray-100 text-gray-800 rounded-lg hover:bg-gray-200 font-medium" data-action="export" data-kind="appointments">
                 <i class="fas fa-download mr-2"></i> Export JSON
               </button>
-              <button class="px-4 py-2 bg-gray-100 text-gray-800 rounded-lg hover:bg-gray-200 font-medium" data-action="export-ics" data-scope="all">
-                <i class="fas fa-calendar-alt mr-2"></i> Export .ics
-              </button>
             </div>
           </div>
 
@@ -750,6 +747,15 @@
             <input name="endAt" type="datetime-local" class="w-full border border-gray-300 rounded-lg px-3 py-2 focus-ring">
           </div>
           <input name="location" type="text" placeholder="Location / link" class="w-full border border-gray-300 rounded-lg px-3 py-2 focus-ring">
+
+          <div class="grid grid-cols-1 gap-3">
+            <input name="zoomJoinUrl" type="url" placeholder="Zoom Join URL (optional)" class="w-full border border-gray-300 rounded-lg px-3 py-2 focus-ring">
+            <div class="grid grid-cols-2 gap-3">
+              <input name="zoomMeetingId" type="text" placeholder="Zoom Meeting ID (optional)" class="w-full border border-gray-300 rounded-lg px-3 py-2 focus-ring">
+              <input name="zoomPasscode" type="text" placeholder="Zoom Passcode (optional)" class="w-full border border-gray-300 rounded-lg px-3 py-2 focus-ring">
+            </div>
+            <div class="text-xs text-gray-500">Tip: Paste the Zoom join link. Meeting ID / passcode are optional but useful for invites.</div>
+          </div>
           <div class="grid grid-cols-2 gap-3">
             <select name="apptLinkType" class="w-full border border-gray-300 rounded-lg px-3 py-2 focus-ring">
               <option value="">Link to (optional)</option>
@@ -874,27 +880,27 @@
 
 <script>
   // Boot marker
-  window.__DEALFLOW_VERSION__ = "1.5.8";
-  console.log("DealFlow Pro boot OK v1.5.8 (summitcrm)");
+  window.__SUMMIT_CRM_VERSION__ = 'v1.5.9';
+  console.log("Summit CRM boot OK v1.5.9 (summitcrm)");
 
   // Sync sidebar/app version label
   try {
-    const v = window.__DEALFLOW_VERSION__ ? `v${window.__DEALFLOW_VERSION__}` : "";
+    const v = window.__Summit_CRM_VERSION__ ? `v${window.__Summit_CRM_VERSION__}` : "";
     const el = document.getElementById("appVersion");
     if (el) el.textContent = `CRM ${v} (cloud sync)`;
   } catch (_) {}
 
 
     /*****************************************************************
-     * Working v1.5.8 CRM - Single-file, localStorage persistence.
+     * Working v1.5.9 CRM - Single-file, localStorage persistence.
      * Enhancements:
      * - Full Edit support (Contacts, Investors, Deals, Projects, Tasks, Appointments)
      * - Appointment end time auto-sync to start time (default +90m, and prevents end<start)
      *****************************************************************/
 
     // ---------- Utilities ----------
-    const BASE_STORAGE_KEY = "dealflowpro_state_v1.5.8";
-    const BASE_META_KEY = "dealflowpro_meta_v1.5.8";
+    const BASE_STORAGE_KEY = "Summit_CRM_state_v1.5.9";
+    const BASE_META_KEY = "Summit_CRM_meta_v1.5.9";
 
     function getStorageKey() {
       const uid = window.firebaseCRM?.getUid?.();
@@ -1148,7 +1154,10 @@
         completed: false,
         completed_at: null,
         created_at: nowIso(),
-        link
+        link,
+        zoom_join_url: (zoom_join_url||"").trim(),
+        zoom_meeting_id: (zoom_meeting_id||"").trim(),
+        zoom_passcode: (zoom_passcode||"").trim()
       };
       state.tasks.unshift(t);
       return t;
@@ -1238,7 +1247,7 @@
       addActivity(`Project "${project.name}" created; template tasks generated.`, { project_id: project.id });
     }
 
-    function createAppointment({ title, start_at, end_at, location="", notes="", link=null }) {
+    function createAppointment({ title, start_at, end_at, location="", notes="", link=null, zoom_join_url="", zoom_meeting_id="", zoom_passcode="" }) {
       const appt = {
         id: uid('appt'),
         title,
@@ -1755,9 +1764,12 @@
             <h4 class="font-medium">${escapeHtml(a.title)}</h4>
             <p class="text-sm text-gray-600">${escapeHtml(formatDateTimeShort(a.start_at))} - ${escapeHtml(formatDateTimeShort(a.end_at))}</p>
             <p class="text-sm text-gray-600">Location: ${escapeHtml(a.location || '—')} • ${escapeHtml(linkLabel(a.link))}</p>
+            ${a.zoom_join_url ? `<p class="text-sm text-gray-700 mt-2">Zoom: <a class="text-indigo-600 underline" href="${escapeHtml(a.zoom_join_url)}" target="_blank" rel="noopener">Join link</a>${a.zoom_meeting_id ? ` • ID: ${escapeHtml(a.zoom_meeting_id)}` : ``}${a.zoom_passcode ? ` • Pass: ${escapeHtml(a.zoom_passcode)}` : ``}</p>` : ``}
             ${a.notes ? `<p class="text-sm text-gray-700 mt-2">${escapeHtml(a.notes)}</p>` : ''}
           </div>
           <div class="text-right space-x-2">
+            ${a.zoom_join_url ? `<button class="text-indigo-600 hover:text-indigo-800 text-sm font-medium" data-action="appointment-zoom-join" data-id="${a.id}">Join Zoom</button>
+            <button class="text-indigo-600 hover:text-indigo-800 text-sm font-medium" data-action="appointment-zoom-copy" data-id="${a.id}">Copy Invite</button>` : ""}
             <button class="text-gray-700 hover:text-gray-900 text-sm font-medium"
                     data-action="appointment-edit" data-id="${a.id}">Edit</button>
             <button class="text-red-600 hover:text-red-800 text-sm font-medium"
@@ -1904,31 +1916,6 @@
     const authBtn = document.getElementById('authBtn');
     const authStatus = document.getElementById('authStatus');
 
-    // Sidebar identity (bottom-left)
-    const sidebarUserName = document.getElementById('sidebarUserName');
-    const sidebarUserMode = document.getElementById('sidebarUserMode');
-    const sidebarAvatar   = document.getElementById('sidebarAvatar');
-
-    // Primary admin (case-insensitive match)
-    const ADMIN_EMAIL = 'kelanlee@summitfinancialanalytics.com';
-
-    function applySidebarIdentity(user) {
-      const email = (user?.email || '').toLowerCase();
-      const isAdmin = !!email && email === ADMIN_EMAIL.toLowerCase();
-
-      const displayName = user ? (isAdmin ? 'Admin User' : 'Reviewer') : 'Admin User';
-      const modeLabel   = user ? 'Cloud save' : 'Local mode';
-
-      if (sidebarUserName) sidebarUserName.textContent = displayName;
-      if (sidebarUserMode) sidebarUserMode.textContent = modeLabel;
-
-      if (sidebarAvatar) {
-        const avatarName = user ? (isAdmin ? 'Admin+User' : 'Reviewer') : 'Admin+User';
-        sidebarAvatar.src = `https://ui-avatars.com/api/?name=${avatarName}&background=6366f1&color=fff`;
-      }
-    }
-
-
     const authModal = document.getElementById('authModal');
     const closeAuthModalBtn = document.getElementById('closeAuthModal');
     const authEmail = document.getElementById('authEmail');
@@ -1962,9 +1949,6 @@
       const label = user ? `Signed in: ${user.email || 'account'}` : 'Local mode';
       if (authStatus) authStatus.textContent = label;
 
-      // Keep sidebar (bottom-left) in sync with auth state
-      try { applySidebarIdentity(user); } catch (_) {}
-
       if (authBtn) {
         authBtn.textContent = user ? 'Sign out' : 'Sign in';
         authBtn.classList.toggle('bg-gray-900', !user);
@@ -1984,9 +1968,6 @@
 
 
 
-
-    // Initialize sidebar identity to Local mode immediately.
-    try { applySidebarIdentity(null); } catch (_) {}
 
     // Initialize auth UI immediately if Firebase is already available.
     try {
@@ -2312,6 +2293,9 @@
           startAt: record.start_at,
           endAt: record.end_at,
           location: record.location || '',
+          zoomJoinUrl: record.zoom_join_url || '',
+          zoomMeetingId: record.zoom_meeting_id || '',
+          zoomPasscode: record.zoom_passcode || '',
           apptNotes: record.notes || '',
           apptLinkType: record.link?.type || '',
         });
@@ -2621,203 +2605,11 @@
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `dealflowpro_${kind}_${new Date().toISOString().slice(0,10)}.json`;
+      a.download = `Summit_CRM_${kind}_${new Date().toISOString().slice(0,10)}.json`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
-    }
-
-    function pad2(n){ return String(n).padStart(2,'0'); }
-    function fmtDateLocal(d){
-      return `${d.getFullYear()}${pad2(d.getMonth()+1)}${pad2(d.getDate())}`;
-    }
-    function fmtDateTimeUtc(d){
-      // YYYYMMDDTHHMMSSZ
-      return d.toISOString().replace(/[-:]/g,'').replace(/\.\d{3}Z$/,'Z');
-    }
-    function escapeICS(s){
-      return String(s ?? '')
-        .replace(/\\/g,'\\\\')
-        .replace(/\n/g,'\\n')
-        .replace(/,/g,'\\,')
-        .replace(/;/g,'\\;');
-    }
-    function downloadTextFile(filename, content, mime){
-      const blob = new Blob([content], { type: mime || 'text/plain' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-    }
-
-    // Export dated items to iCalendar (.ics) for import into Google Calendar / Apple Calendar.
-    // Scope can be: all | contacts | deals | projects | tasks | appointments
-    function exportICS(scope='all') {
-      const now = new Date();
-      const stamp = fmtDateTimeUtc(now);
-      const calName = 'DealFlow Pro';
-      const events = [];
-
-      function pushAllDay(summary, dateIsoOrAny, description='', location='', url='', uidSeed='') {
-        if (!dateIsoOrAny) return;
-        const d = new Date(dateIsoOrAny);
-        if (isNaN(d.getTime())) return;
-        const dt = fmtDateLocal(d);
-        // DTEND for all-day is the day after DTSTART
-        const dEnd = new Date(d.getFullYear(), d.getMonth(), d.getDate()+1);
-        const dtEnd = fmtDateLocal(dEnd);
-        const uid = `${uidSeed || (stamp+'-'+Math.random().toString(16).slice(2))}@dealflowpro`;
-        const lines = [
-          'BEGIN:VEVENT',
-          `UID:${uid}`,
-          `DTSTAMP:${stamp}`,
-          `SUMMARY:${escapeICS(summary)}`,
-          `DTSTART;VALUE=DATE:${dt}`,
-          `DTEND;VALUE=DATE:${dtEnd}`,
-        ];
-        if (description) lines.push(`DESCRIPTION:${escapeICS(description)}`);
-        if (location) lines.push(`LOCATION:${escapeICS(location)}`);
-        if (url) lines.push(`URL:${escapeICS(url)}`);
-        lines.push('END:VEVENT');
-        events.push(lines.join('\r\n'));
-      }
-
-      function pushTimed(summary, startIso, endIso, description='', location='', url='', uidSeed='') {
-        if (!startIso) return;
-        const s = new Date(startIso);
-        if (isNaN(s.getTime())) return;
-        let e = endIso ? new Date(endIso) : null;
-        if (!e || isNaN(e.getTime())) e = new Date(s.getTime() + 30*60*1000); // default 30m
-        const uid = `${uidSeed || (stamp+'-'+Math.random().toString(16).slice(2))}@dealflowpro`;
-        const lines = [
-          'BEGIN:VEVENT',
-          `UID:${uid}`,
-          `DTSTAMP:${stamp}`,
-          `SUMMARY:${escapeICS(summary)}`,
-          `DTSTART:${fmtDateTimeUtc(s)}`,
-          `DTEND:${fmtDateTimeUtc(e)}`,
-        ];
-        if (description) lines.push(`DESCRIPTION:${escapeICS(description)}`);
-        if (location) lines.push(`LOCATION:${escapeICS(location)}`);
-        if (url) lines.push(`URL:${escapeICS(url)}`);
-        lines.push('END:VEVENT');
-        events.push(lines.join('\r\n'));
-      }
-
-      const want = (k) => scope === 'all' || scope === k;
-
-      if (want('contacts')) {
-        (state.contacts || []).forEach(c => {
-          if (c?.next_touch_due_at) {
-            pushAllDay(
-              `Follow up: ${c.name || 'Contact'}`,
-              c.next_touch_due_at,
-              (c.organization ? `Org: ${c.organization}\n` : '') + (c.notes || ''),
-              '',
-              '',
-              `contact-${c.id || ''}`
-            );
-          }
-        });
-      }
-
-      if (want('deals')) {
-        (state.deals || []).forEach(d => {
-          if (d?.close_target_date) {
-            pushAllDay(
-              `Deal target: ${d.name || 'Deal'}`,
-              d.close_target_date,
-              `Stage: ${d.stage || ''}\nType: ${d.type || ''}\nAmount: ${d.amount ?? ''}\n\n${d.notes || ''}`,
-              '',
-              '',
-              `deal-${d.id || ''}`
-            );
-          }
-        });
-      }
-
-      if (want('projects')) {
-        (state.projects || []).forEach(p => {
-          if (p?.target_date) {
-            pushAllDay(
-              `Project target: ${p.name || 'Project'}`,
-              p.target_date,
-              `Status: ${p.status || ''}\nType: ${p.type || ''}\n\n${p.notes || ''}`,
-              '',
-              '',
-              `project-${p.id || ''}`
-            );
-          }
-        });
-      }
-
-      if (want('tasks')) {
-        (state.tasks || []).forEach(t => {
-          if (t?.due_at && !t.completed) {
-            // treat as timed if it contains a time; otherwise all-day.
-            const s = String(t.due_at);
-            const hasTime = s.includes('T');
-            if (hasTime) {
-              pushTimed(
-                `Task due: ${t.title || 'Task'}`,
-                t.due_at,
-                null,
-                t.description || '',
-                '',
-                t.link || '',
-                `task-${t.id || ''}`
-              );
-            } else {
-              pushAllDay(
-                `Task due: ${t.title || 'Task'}`,
-                t.due_at,
-                t.description || '',
-                '',
-                t.link || '',
-                `task-${t.id || ''}`
-              );
-            }
-          }
-        });
-      }
-
-      if (want('appointments') || want('calendar')) {
-        (state.appointments || []).forEach(a => {
-          if (a?.start_at) {
-            pushTimed(
-              `Appointment: ${a.title || 'Meeting'}`,
-              a.start_at,
-              a.end_at,
-              a.notes || '',
-              a.location || '',
-              a.link || '',
-              `appt-${a.id || ''}`
-            );
-          }
-        });
-      }
-
-      const ics = [
-        'BEGIN:VCALENDAR',
-        'VERSION:2.0',
-        'PRODID:-//DealFlow Pro//CRM//EN',
-        'CALSCALE:GREGORIAN',
-        'METHOD:PUBLISH',
-        `X-WR-CALNAME:${escapeICS(calName)}`,
-        ...events,
-        'END:VCALENDAR'
-      ].join('\r\n') + '\r\n';
-
-      const fileScope = (scope === 'calendar') ? 'appointments' : scope;
-      const filename = `dealflowpro_${fileScope}_export_${new Date().toISOString().slice(0,10)}.ics`;
-      downloadTextFile(filename, ics, 'text/calendar');
-
-      showNotification(`Exported ${events.length} item(s) to .ics. Import into Google Calendar or Apple Calendar.`, 'success');
     }
 
     // ---------- Demo Data ----------
@@ -2877,27 +2669,27 @@
     // Long-lived auth/UI/state watcher:
     // If auth restores *after* initial startup window, ensure we (1) flip UI to signed-in,
     // (2) reload the per-uid local state, and (3) reconcile with cloud once.
-    let __dealflowLastUid = null;
-    let __dealflowReconciling = false;
+    let __Summit_CRMLastUid = null;
+    let __Summit_CRMReconciling = false;
     setInterval(async () => {
       try {
         const uid = window.firebaseCRM?.getUid?.() || null;
         const email = window.firebaseCRM?.getEmail?.() || null;
 
-        if (uid && uid !== __dealflowLastUid) {
-          __dealflowLastUid = uid;
+        if (uid && uid !== __Summit_CRMLastUid) {
+          __Summit_LastUid = uid;
           // Force UI to signed-in immediately.
           try { updateAuthUI({ uid, email }); } catch (_) {}
           // Reload local state for this uid and reconcile once.
-          if (!__dealflowReconciling) {
-            __dealflowReconciling = true;
+          if (!__Summit_CRMReconciling) {
+            __Summit_CRMReconciling = true;
             try { await reconcileLocalAndCloud({ uid, email }); } catch (_) {}
-            __dealflowReconciling = false;
+            __Summit_CRMReconciling = false;
           }
         }
 
         // If we truly have no uid, keep lastUid null (but do not overwrite signed-in UI if uid exists).
-        if (!uid) __dealflowLastUid = null;
+        if (!uid) __Summit_CRMLastUid = null;
       } catch (_) {}
     }, 1000);
 
@@ -2955,6 +2747,45 @@ function handleDelegatedEvent(e) {
     if (action === 'project-edit') { openEditModal('project', id); return; }
     if (action === 'task-edit') { openEditModal('task', id); return; }
     if (action === 'appointment-edit') { openEditModal('appointment', id); return; }
+
+    if (action === 'appointment-zoom-join') {
+      const a = findById('appointments', id);
+      const url = a?.zoom_join_url || '';
+      if (!url) { showNotification('No Zoom link on this appointment.', 'error'); return; }
+      window.open(url, '_blank', 'noopener');
+      return;
+    }
+    if (action === 'appointment-zoom-copy') {
+      const a = findById('appointments', id);
+      if (!a) return;
+      const startTxt = a.start_at ? formatDateTimeShort(a.start_at) : 'TBD';
+      const endTxt = a.end_at ? formatDateTimeShort(a.end_at) : '';
+      const when = endTxt ? `${startTxt} - ${endTxt}` : startTxt;
+      const lines = [
+        a.title || 'Zoom Meeting',
+        `When: ${when}`,
+        a.location ? `Location: ${a.location}` : null,
+        a.zoom_join_url ? `Join Zoom: ${a.zoom_join_url}` : null,
+        a.zoom_meeting_id ? `Meeting ID: ${a.zoom_meeting_id}` : null,
+        a.zoom_passcode ? `Passcode: ${a.zoom_passcode}` : null,
+        a.notes ? `Notes: ${a.notes}` : null
+      ].filter(Boolean);
+      const text = lines.join('\n');
+      try {
+        await navigator.clipboard.writeText(text);
+        showNotification('Invite copied to clipboard.', 'success');
+      } catch (e) {
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+        showNotification('Invite copied.', 'success');
+      }
+      return;
+    }
+
 
     if (action === 'task-complete') {
       completeTask(id);
@@ -3028,10 +2859,6 @@ function handleDelegatedEvent(e) {
     }
     if (action === 'export') {
       exportJson(actionEl.dataset.kind);
-      return;
-    }
-    if (action === 'export-ics') {
-      exportICS(actionEl.dataset.scope || actionEl.dataset.kind || 'all');
       return;
     }
     if (action === 'clear-activity') {
@@ -3359,6 +3186,9 @@ document.addEventListener('touchend', handleDelegatedEvent, true);
             start_at: start.toISOString(),
             end_at: end.toISOString(),
             location: (data.location||"").trim(),
+            zoom_join_url: (data.zoomJoinUrl||"").trim(),
+            zoom_meeting_id: (data.zoomMeetingId||"").trim(),
+            zoom_passcode: (data.zoomPasscode||"").trim(),
             notes: (data.apptNotes||"").trim(),
             link
           };
@@ -3467,7 +3297,7 @@ document.addEventListener('touchend', handleDelegatedEvent, true);
         showNotification('Tip: Click "Seed Demo Data" in Quick Add modal.', 'info');
       }
 
-      console.log('DealFlow Pro v1.5.8 loaded. Data stored in localStorage key:', getStorageKey());
+      console.log('Summit CRM v1.5.9 loaded. Data stored in localStorage key:', getStorageKey());
     }
 
     init();
