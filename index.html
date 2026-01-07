@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>DealFlow Pro - CRM (Working v1.5.6)</title>
+  <title>DealFlow Pro - CRM (Working v1.5.8)</title>
 
   <!-- Tailwind (prototype CDN) -->
   <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
@@ -541,6 +541,9 @@
               <button class="px-4 py-2 bg-gray-100 text-gray-800 rounded-lg hover:bg-gray-200 font-medium" data-action="export" data-kind="appointments">
                 <i class="fas fa-download mr-2"></i> Export JSON
               </button>
+              <button class="px-4 py-2 bg-gray-100 text-gray-800 rounded-lg hover:bg-gray-200 font-medium" data-action="export-ics" data-scope="all">
+                <i class="fas fa-calendar-alt mr-2"></i> Export .ics
+              </button>
             </div>
           </div>
 
@@ -871,8 +874,8 @@
 
 <script>
   // Boot marker
-  window.__DEALFLOW_VERSION__ = "1.5.5";
-  console.log("DealFlow Pro boot OK v1.5.6 (summitcrm)");
+  window.__DEALFLOW_VERSION__ = "1.5.8";
+  console.log("DealFlow Pro boot OK v1.5.8 (summitcrm)");
 
   // Sync sidebar/app version label
   try {
@@ -883,15 +886,15 @@
 
 
     /*****************************************************************
-     * Working v1.5.6 CRM - Single-file, localStorage persistence.
+     * Working v1.5.8 CRM - Single-file, localStorage persistence.
      * Enhancements:
      * - Full Edit support (Contacts, Investors, Deals, Projects, Tasks, Appointments)
      * - Appointment end time auto-sync to start time (default +90m, and prevents end<start)
      *****************************************************************/
 
     // ---------- Utilities ----------
-    const BASE_STORAGE_KEY = "dealflowpro_state_v1.5.6";
-    const BASE_META_KEY = "dealflowpro_meta_v1.5.6";
+    const BASE_STORAGE_KEY = "dealflowpro_state_v1.5.8";
+    const BASE_META_KEY = "dealflowpro_meta_v1.5.8";
 
     function getStorageKey() {
       const uid = window.firebaseCRM?.getUid?.();
@@ -2625,6 +2628,198 @@
       URL.revokeObjectURL(url);
     }
 
+    function pad2(n){ return String(n).padStart(2,'0'); }
+    function fmtDateLocal(d){
+      return `${d.getFullYear()}${pad2(d.getMonth()+1)}${pad2(d.getDate())}`;
+    }
+    function fmtDateTimeUtc(d){
+      // YYYYMMDDTHHMMSSZ
+      return d.toISOString().replace(/[-:]/g,'').replace(/\.\d{3}Z$/,'Z');
+    }
+    function escapeICS(s){
+      return String(s ?? '')
+        .replace(/\\/g,'\\\\')
+        .replace(/\n/g,'\\n')
+        .replace(/,/g,'\\,')
+        .replace(/;/g,'\\;');
+    }
+    function downloadTextFile(filename, content, mime){
+      const blob = new Blob([content], { type: mime || 'text/plain' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
+
+    // Export dated items to iCalendar (.ics) for import into Google Calendar / Apple Calendar.
+    // Scope can be: all | contacts | deals | projects | tasks | appointments
+    function exportICS(scope='all') {
+      const now = new Date();
+      const stamp = fmtDateTimeUtc(now);
+      const calName = 'DealFlow Pro';
+      const events = [];
+
+      function pushAllDay(summary, dateIsoOrAny, description='', location='', url='', uidSeed='') {
+        if (!dateIsoOrAny) return;
+        const d = new Date(dateIsoOrAny);
+        if (isNaN(d.getTime())) return;
+        const dt = fmtDateLocal(d);
+        // DTEND for all-day is the day after DTSTART
+        const dEnd = new Date(d.getFullYear(), d.getMonth(), d.getDate()+1);
+        const dtEnd = fmtDateLocal(dEnd);
+        const uid = `${uidSeed || (stamp+'-'+Math.random().toString(16).slice(2))}@dealflowpro`;
+        const lines = [
+          'BEGIN:VEVENT',
+          `UID:${uid}`,
+          `DTSTAMP:${stamp}`,
+          `SUMMARY:${escapeICS(summary)}`,
+          `DTSTART;VALUE=DATE:${dt}`,
+          `DTEND;VALUE=DATE:${dtEnd}`,
+        ];
+        if (description) lines.push(`DESCRIPTION:${escapeICS(description)}`);
+        if (location) lines.push(`LOCATION:${escapeICS(location)}`);
+        if (url) lines.push(`URL:${escapeICS(url)}`);
+        lines.push('END:VEVENT');
+        events.push(lines.join('\r\n'));
+      }
+
+      function pushTimed(summary, startIso, endIso, description='', location='', url='', uidSeed='') {
+        if (!startIso) return;
+        const s = new Date(startIso);
+        if (isNaN(s.getTime())) return;
+        let e = endIso ? new Date(endIso) : null;
+        if (!e || isNaN(e.getTime())) e = new Date(s.getTime() + 30*60*1000); // default 30m
+        const uid = `${uidSeed || (stamp+'-'+Math.random().toString(16).slice(2))}@dealflowpro`;
+        const lines = [
+          'BEGIN:VEVENT',
+          `UID:${uid}`,
+          `DTSTAMP:${stamp}`,
+          `SUMMARY:${escapeICS(summary)}`,
+          `DTSTART:${fmtDateTimeUtc(s)}`,
+          `DTEND:${fmtDateTimeUtc(e)}`,
+        ];
+        if (description) lines.push(`DESCRIPTION:${escapeICS(description)}`);
+        if (location) lines.push(`LOCATION:${escapeICS(location)}`);
+        if (url) lines.push(`URL:${escapeICS(url)}`);
+        lines.push('END:VEVENT');
+        events.push(lines.join('\r\n'));
+      }
+
+      const want = (k) => scope === 'all' || scope === k;
+
+      if (want('contacts')) {
+        (state.contacts || []).forEach(c => {
+          if (c?.next_touch_due_at) {
+            pushAllDay(
+              `Follow up: ${c.name || 'Contact'}`,
+              c.next_touch_due_at,
+              (c.organization ? `Org: ${c.organization}\n` : '') + (c.notes || ''),
+              '',
+              '',
+              `contact-${c.id || ''}`
+            );
+          }
+        });
+      }
+
+      if (want('deals')) {
+        (state.deals || []).forEach(d => {
+          if (d?.close_target_date) {
+            pushAllDay(
+              `Deal target: ${d.name || 'Deal'}`,
+              d.close_target_date,
+              `Stage: ${d.stage || ''}\nType: ${d.type || ''}\nAmount: ${d.amount ?? ''}\n\n${d.notes || ''}`,
+              '',
+              '',
+              `deal-${d.id || ''}`
+            );
+          }
+        });
+      }
+
+      if (want('projects')) {
+        (state.projects || []).forEach(p => {
+          if (p?.target_date) {
+            pushAllDay(
+              `Project target: ${p.name || 'Project'}`,
+              p.target_date,
+              `Status: ${p.status || ''}\nType: ${p.type || ''}\n\n${p.notes || ''}`,
+              '',
+              '',
+              `project-${p.id || ''}`
+            );
+          }
+        });
+      }
+
+      if (want('tasks')) {
+        (state.tasks || []).forEach(t => {
+          if (t?.due_at && !t.completed) {
+            // treat as timed if it contains a time; otherwise all-day.
+            const s = String(t.due_at);
+            const hasTime = s.includes('T');
+            if (hasTime) {
+              pushTimed(
+                `Task due: ${t.title || 'Task'}`,
+                t.due_at,
+                null,
+                t.description || '',
+                '',
+                t.link || '',
+                `task-${t.id || ''}`
+              );
+            } else {
+              pushAllDay(
+                `Task due: ${t.title || 'Task'}`,
+                t.due_at,
+                t.description || '',
+                '',
+                t.link || '',
+                `task-${t.id || ''}`
+              );
+            }
+          }
+        });
+      }
+
+      if (want('appointments') || want('calendar')) {
+        (state.appointments || []).forEach(a => {
+          if (a?.start_at) {
+            pushTimed(
+              `Appointment: ${a.title || 'Meeting'}`,
+              a.start_at,
+              a.end_at,
+              a.notes || '',
+              a.location || '',
+              a.link || '',
+              `appt-${a.id || ''}`
+            );
+          }
+        });
+      }
+
+      const ics = [
+        'BEGIN:VCALENDAR',
+        'VERSION:2.0',
+        'PRODID:-//DealFlow Pro//CRM//EN',
+        'CALSCALE:GREGORIAN',
+        'METHOD:PUBLISH',
+        `X-WR-CALNAME:${escapeICS(calName)}`,
+        ...events,
+        'END:VCALENDAR'
+      ].join('\r\n') + '\r\n';
+
+      const fileScope = (scope === 'calendar') ? 'appointments' : scope;
+      const filename = `dealflowpro_${fileScope}_export_${new Date().toISOString().slice(0,10)}.ics`;
+      downloadTextFile(filename, ics, 'text/calendar');
+
+      showNotification(`Exported ${events.length} item(s) to .ics. Import into Google Calendar or Apple Calendar.`, 'success');
+    }
+
     // ---------- Demo Data ----------
     function seedDemoData() {
       if (state.contacts.length || state.deals.length || state.tasks.length || state.projects.length || state.appointments.length || state.investors.length) {
@@ -2833,6 +3028,10 @@ function handleDelegatedEvent(e) {
     }
     if (action === 'export') {
       exportJson(actionEl.dataset.kind);
+      return;
+    }
+    if (action === 'export-ics') {
+      exportICS(actionEl.dataset.scope || actionEl.dataset.kind || 'all');
       return;
     }
     if (action === 'clear-activity') {
@@ -3268,7 +3467,7 @@ document.addEventListener('touchend', handleDelegatedEvent, true);
         showNotification('Tip: Click "Seed Demo Data" in Quick Add modal.', 'info');
       }
 
-      console.log('DealFlow Pro v1.5.6 loaded. Data stored in localStorage key:', getStorageKey());
+      console.log('DealFlow Pro v1.5.8 loaded. Data stored in localStorage key:', getStorageKey());
     }
 
     init();
