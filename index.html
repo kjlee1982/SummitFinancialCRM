@@ -1247,7 +1247,7 @@
       addActivity(`Project "${project.name}" created; template tasks generated.`, { project_id: project.id });
     }
 
-    function createAppointment({ title, start_at, end_at, location="", notes="", link=null, zoom_join_url="", zoom_meeting_id="", zoom_passcode="" }) {
+    function createAppointment({ title, start_at, end_at, location=null, notes="", link=null, zoom_join_url="", zoom_meeting_id="", zoom_passcode="" }) {
       const appt = {
         id: uid('appt'),
         title,
@@ -1255,6 +1255,9 @@
         end_at,
         location,
         notes,
+        zoom_join_url,
+        zoom_meeting_id,
+        zoom_passcode,
         created_at: nowIso(),
         link
       };
@@ -1275,56 +1278,6 @@
       }
 
       return appt;
-    }
-
-    // ---------- Rendering ----------
-    function setView(view) {
-      currentView = view;
-      document.querySelectorAll('[data-view]').forEach(s => s.classList.toggle('hidden', s.dataset.view !== view));
-      document.querySelectorAll('[data-nav]').forEach(a => a.classList.toggle('active', a.dataset.nav === view));
-      // Mode 1: instant local rerender, optional throttled cloud pull.
-      try { renderCurrentTab(); } catch (_) { try { renderAll(); } catch (_) {} }
-      maybeCloudPull(true);
-    }
-
-    let currentView = 'dashboard';
-    let lastCloudPullMs = 0;
-
-    function renderCurrentTab() {
-      switch (currentView) {
-        case 'dashboard': renderDashboard(); break;
-        case 'contacts': renderContacts(); break;
-        case 'investors': renderInvestors(); break;
-        case 'deals': renderDeals(); break;
-        case 'projects': renderProjects(); break;
-        case 'tasks': renderTasks(); break;
-        case 'calendar': renderAppointments(); break;
-        case 'activity': renderActivity(); break;
-        default: renderAll(); break;
-      }
-    }
-
-    async function maybeCloudPull(silent=true) {
-      if (!isSignedIn || !cloudReady) return;
-      const now = Date.now();
-      if (now - lastCloudPullMs < 60000) return; // Mode 1: throttle pulls
-      lastCloudPullMs = now;
-      try {
-        await cloudSyncPullIfAvailable({ silent });
-      } catch (e) {
-        console.warn('Cloud pull failed:', e);
-      }
-    }
-
-    // Pull when the tab regains focus (throttled)
-    window.addEventListener('focus', () => { maybeCloudPull(true); });
-
-
-    function stageBadge(enumName, key) {
-      const def = getEnum(enumName, key);
-      if (!def) return `<span class="px-2 py-1 rounded-full text-xs bg-gray-100 text-gray-800">—</span>`;
-      const cls = def.cls ? def.cls : 'bg-gray-100 text-gray-800';
-      return `<span class="${cls} px-2 py-1 rounded-full text-xs">${def.label}</span>`;
     }
 
     function linkLabel(link) {
@@ -2703,7 +2656,7 @@
 
     // ---------- Event handling (delegation) ----------
 // Mobile browsers sometimes delay/suppress 'click' in certain edge cases; bind both.
-async function handleDelegatedEvent(e) {
+function handleDelegatedEvent(e) {
   try {
     const t = e.target;
 
