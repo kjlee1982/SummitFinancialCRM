@@ -2703,7 +2703,7 @@
 
     // ---------- Event handling (delegation) ----------
 // Mobile browsers sometimes delay/suppress 'click' in certain edge cases; bind both.
-function handleDelegatedEvent(e) {
+async function handleDelegatedEvent(e) {
   try {
     const t = e.target;
 
