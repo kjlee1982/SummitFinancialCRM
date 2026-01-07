@@ -111,10 +111,10 @@
 
       <div class="p-4 border-t border-gray-800">
         <div class="flex items-center">
-          <img src="https://ui-avatars.com/api/?name=Admin+User&background=6366f1&color=fff" alt="Avatar" class="w-8 h-8 rounded-full">
+          <img id="sidebarAvatar" src="https://ui-avatars.com/api/?name=Admin+User&background=6366f1&color=fff" alt="Avatar" class="w-8 h-8 rounded-full">
           <div class="ml-3">
-            <p class="text-sm font-medium text-white">Admin User</p>
-            <p class="text-xs text-gray-400">Local mode</p>
+            <p id="sidebarUserName" class="text-sm font-medium text-white">Admin User</p>
+            <p id="sidebarUserMode" class="text-xs text-gray-400">Local mode</p>
           </div>
         </div>
       </div>
@@ -1901,6 +1901,31 @@
     const authBtn = document.getElementById('authBtn');
     const authStatus = document.getElementById('authStatus');
 
+    // Sidebar identity (bottom-left)
+    const sidebarUserName = document.getElementById('sidebarUserName');
+    const sidebarUserMode = document.getElementById('sidebarUserMode');
+    const sidebarAvatar   = document.getElementById('sidebarAvatar');
+
+    // Primary admin (case-insensitive match)
+    const ADMIN_EMAIL = 'kelanlee@summitfinancialanalytics.com';
+
+    function applySidebarIdentity(user) {
+      const email = (user?.email || '').toLowerCase();
+      const isAdmin = !!email && email === ADMIN_EMAIL.toLowerCase();
+
+      const displayName = user ? (isAdmin ? 'Admin User' : 'Reviewer') : 'Admin User';
+      const modeLabel   = user ? 'Cloud save' : 'Local mode';
+
+      if (sidebarUserName) sidebarUserName.textContent = displayName;
+      if (sidebarUserMode) sidebarUserMode.textContent = modeLabel;
+
+      if (sidebarAvatar) {
+        const avatarName = user ? (isAdmin ? 'Admin+User' : 'Reviewer') : 'Admin+User';
+        sidebarAvatar.src = `https://ui-avatars.com/api/?name=${avatarName}&background=6366f1&color=fff`;
+      }
+    }
+
+
     const authModal = document.getElementById('authModal');
     const closeAuthModalBtn = document.getElementById('closeAuthModal');
     const authEmail = document.getElementById('authEmail');
@@ -1934,6 +1959,9 @@
       const label = user ? `Signed in: ${user.email || 'account'}` : 'Local mode';
       if (authStatus) authStatus.textContent = label;
 
+      // Keep sidebar (bottom-left) in sync with auth state
+      try { applySidebarIdentity(user); } catch (_) {}
+
       if (authBtn) {
         authBtn.textContent = user ? 'Sign out' : 'Sign in';
         authBtn.classList.toggle('bg-gray-900', !user);
@@ -1953,6 +1981,9 @@
 
 
 
+
+    // Initialize sidebar identity to Local mode immediately.
+    try { applySidebarIdentity(null); } catch (_) {}
 
     // Initialize auth UI immediately if Firebase is already available.
     try {
