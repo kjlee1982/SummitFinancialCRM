@@ -2172,8 +2172,8 @@ if (q && !hay.includes(q)) return false;
     }
 
     // ---------- Property type formatter ----------
-    function formatPropType(v) {
-      const raw = (v || '').toString().trim();
+    const formatPropType = (v) => {
+      const raw = String(v || '').trim();
       if (!raw) return '';
       const map = {
         // New taxonomy
@@ -2183,15 +2183,18 @@ if (q && !hay.includes(q)) return false;
         duplex: 'Duplex',
         triplex: 'Triplex',
         fourplex: 'Fourplex',
+
         mf_5_24: 'Multifamily (5–24)',
         mf_25_99: 'Multifamily (25–99)',
         mf_100_plus: 'Multifamily (100+)',
+
         mixed_use: 'Mixed-Use',
         retail: 'Retail',
         office: 'Office',
         industrial: 'Industrial',
         flex: 'Flex',
         medical_office: 'Medical Office',
+
         rv_park: 'RV Park',
         self_storage: 'Self-Storage',
         hospitality: 'Hospitality (Hotel/Motel)',
@@ -2210,11 +2213,8 @@ if (q && !hay.includes(q)) return false;
         land: 'Land',
         other: 'Other'
       };
-      return map[raw] || raw.replaceAll('_',' ');
+      return map[raw] || raw.replaceAll('_', ' ');
     };
-      return map[raw] || raw.replaceAll('_',' ');
-    }
-
 
     // ---------- Modal helpers ----------
     const modal = document.getElementById('quickAddModal');
