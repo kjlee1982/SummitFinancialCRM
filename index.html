@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Summit - CRM (Working v1.5.9)</title>
+  <title>DealFlow Pro - CRM (Working v1.5.6)</title>
 
   <!-- Tailwind (prototype CDN) -->
   <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
@@ -76,7 +76,7 @@
     <div class="sidebar w-64 bg-gray-900 text-gray-300 flex flex-col">
       <div class="p-6">
         <h1 class="text-2xl font-bold text-white flex items-center">
-          <i class="fas fa-chart-network mr-2"></i> Summit CRM
+          <i class="fas fa-chart-network mr-2"></i> DealFlow Pro
         </h1>
         <p id="appVersion" class="text-sm text-gray-400 mt-1">CRM</p>
       </div>
@@ -90,7 +90,10 @@
             <li><a href="#" class="nav-item" data-nav="investors"><i class="fas fa-hand-holding-usd mr-3"></i> Investors</a></li>
             <li><a href="#" class="nav-item" data-nav="deals"><i class="fas fa-file-contract mr-3"></i> Deals</a></li>
             <li><a href="#" class="nav-item" data-nav="projects"><i class="fas fa-project-diagram mr-3"></i> Projects</a></li>
-            <li><a href="#" class="nav-item" data-nav="tasks"><i class="fas fa-tasks mr-3"></i> Tasks</a></li>
+            
+            <li><a href="#" class="nav-item" data-nav="llcs"><i class="fas fa-building mr-3"></i> LLCs</a></li>
+            <li><a href="#" class="nav-item" data-nav="properties"><i class="fas fa-map-marked-alt mr-3"></i> Properties</a></li>
+<li><a href="#" class="nav-item" data-nav="tasks"><i class="fas fa-tasks mr-3"></i> Tasks</a></li>
             <li><a href="#" class="nav-item" data-nav="calendar"><i class="fas fa-calendar-alt mr-3"></i> Calendar</a></li>
             <li><a href="#" class="nav-item" data-nav="activity"><i class="fas fa-stream mr-3"></i> Activity</a></li>
           </ul>
@@ -111,10 +114,10 @@
 
       <div class="p-4 border-t border-gray-800">
         <div class="flex items-center">
-          <img src="https://ui-avatars.com/api/?name=Admin+User&background=6366f1&color=fff" alt="Avatar" class="w-8 h-8 rounded-full">
+          <img id="sidebarAvatar" src="https://ui-avatars.com/api/?name=Admin+User&background=6366f1&color=fff" alt="Avatar" class="w-8 h-8 rounded-full">
           <div class="ml-3">
-            <p class="text-sm font-medium text-white">Admin User</p>
-            <p class="text-xs text-gray-400">Local mode</p>
+            <p id="sidebarUserName" class="text-sm font-medium text-white">Admin User</p>
+            <p id="sidebarUserMode" class="text-xs text-gray-400">Local mode</p>
           </div>
         </div>
       </div>
@@ -479,7 +482,41 @@
         </section>
 
         <!-- TASKS VIEW -->
-        <section data-view="tasks" class="hidden">
+        <section 
+      <!-- LLCs View -->
+      <section class="hidden" data-view="llcs">
+        <div class="flex items-center justify-between mb-4">
+          <div>
+            <h2 class="text-xl font-semibold text-gray-900">LLC Tracking</h2>
+            <p class="text-sm text-gray-500">Track entities, status, and key identifiers.</p>
+          </div>
+          <button class="px-3 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-sm font-medium focus-ring" data-open-quickadd="llc">
+            <i class="fas fa-plus mr-2"></i>Add LLC
+          </button>
+        </div>
+
+        <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+          <div id="llcTable" class="p-4 text-sm text-gray-600">No LLCs yet.</div>
+        </div>
+      </section>
+
+      <!-- Properties View -->
+      <section class="hidden" data-view="properties">
+        <div class="flex items-center justify-between mb-4">
+          <div>
+            <h2 class="text-xl font-semibold text-gray-900">Property Tracking</h2>
+            <p class="text-sm text-gray-500">Track properties, ownership LLC, and key dates.</p>
+          </div>
+          <button class="px-3 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-sm font-medium focus-ring" data-open-quickadd="property">
+            <i class="fas fa-plus mr-2"></i>Add Property
+          </button>
+        </div>
+
+        <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+          <div id="propertyTable" class="p-4 text-sm text-gray-600">No properties yet.</div>
+        </div>
+      </section>
+data-view="tasks" class="hidden">
           <div class="flex items-start justify-between gap-4 mb-6">
             <div>
               <h2 class="text-2xl font-bold text-gray-900">Tasks</h2>
@@ -747,15 +784,6 @@
             <input name="endAt" type="datetime-local" class="w-full border border-gray-300 rounded-lg px-3 py-2 focus-ring">
           </div>
           <input name="location" type="text" placeholder="Location / link" class="w-full border border-gray-300 rounded-lg px-3 py-2 focus-ring">
-
-          <div class="grid grid-cols-1 gap-3">
-            <input name="zoomJoinUrl" type="url" placeholder="Zoom Join URL (optional)" class="w-full border border-gray-300 rounded-lg px-3 py-2 focus-ring">
-            <div class="grid grid-cols-2 gap-3">
-              <input name="zoomMeetingId" type="text" placeholder="Zoom Meeting ID (optional)" class="w-full border border-gray-300 rounded-lg px-3 py-2 focus-ring">
-              <input name="zoomPasscode" type="text" placeholder="Zoom Passcode (optional)" class="w-full border border-gray-300 rounded-lg px-3 py-2 focus-ring">
-            </div>
-            <div class="text-xs text-gray-500">Tip: Paste the Zoom join link. Meeting ID / passcode are optional but useful for invites.</div>
-          </div>
           <div class="grid grid-cols-2 gap-3">
             <select name="apptLinkType" class="w-full border border-gray-300 rounded-lg px-3 py-2 focus-ring">
               <option value="">Link to (optional)</option>
@@ -768,6 +796,55 @@
           </div>
           <textarea name="apptNotes" rows="2" placeholder="Notes" class="w-full border border-gray-300 rounded-lg px-3 py-2 focus-ring"></textarea>
           <div class="text-xs text-gray-500">Creating an appointment auto-creates a prep task due 24 hours before (if possible).</div>
+
+        <!-- LLC Quick Add -->
+        <div data-form id="formLLC" class="space-y-3 hidden">
+          <input name="llcName" type="text" placeholder="LLC Name (e.g., Summit MF Acquisition I LLC)" class="w-full border border-gray-300 rounded-lg px-3 py-2 focus-ring">
+          <div class="grid grid-cols-2 gap-3">
+            <input name="state" type="text" placeholder="State (e.g., WY)" class="w-full border border-gray-300 rounded-lg px-3 py-2 focus-ring">
+            <select name="status" class="w-full border border-gray-300 rounded-lg px-3 py-2 focus-ring">
+              <option value="active">Active</option>
+              <option value="dormant">Dormant / Shelf</option>
+              <option value="forming">Forming</option>
+              <option value="dissolved">Dissolved</option>
+            </select>
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <input name="formationDate" type="date" class="w-full border border-gray-300 rounded-lg px-3 py-2 focus-ring">
+            <input name="ein" type="text" placeholder="EIN (optional)" class="w-full border border-gray-300 rounded-lg px-3 py-2 focus-ring">
+          </div>
+          <input name="registeredAgent" type="text" placeholder="Registered Agent (optional)" class="w-full border border-gray-300 rounded-lg px-3 py-2 focus-ring">
+          <textarea name="llcNotes" rows="2" placeholder="Notes" class="w-full border border-gray-300 rounded-lg px-3 py-2 focus-ring"></textarea>
+        </div>
+
+        <!-- Property Quick Add -->
+        <div data-form id="formProperty" class="space-y-3 hidden">
+          <input name="propName" type="text" placeholder="Property Name / Nickname" class="w-full border border-gray-300 rounded-lg px-3 py-2 focus-ring">
+          <input name="address" type="text" placeholder="Address / Location" class="w-full border border-gray-300 rounded-lg px-3 py-2 focus-ring">
+          <div class="grid grid-cols-3 gap-3">
+            <input name="city" type="text" placeholder="City" class="w-full border border-gray-300 rounded-lg px-3 py-2 focus-ring">
+            <input name="propState" type="text" placeholder="State" class="w-full border border-gray-300 rounded-lg px-3 py-2 focus-ring">
+            <input name="zip" type="text" placeholder="ZIP" class="w-full border border-gray-300 rounded-lg px-3 py-2 focus-ring">
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <input name="county" type="text" placeholder="County (optional)" class="w-full border border-gray-300 rounded-lg px-3 py-2 focus-ring">
+            <input name="parcel" type="text" placeholder="Parcel/APN (optional)" class="w-full border border-gray-300 rounded-lg px-3 py-2 focus-ring">
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <input name="purchaseDate" type="date" class="w-full border border-gray-300 rounded-lg px-3 py-2 focus-ring">
+            <select name="propStatus" class="w-full border border-gray-300 rounded-lg px-3 py-2 focus-ring">
+              <option value="prospect">Prospect</option>
+              <option value="under_contract">Under Contract</option>
+              <option value="owned">Owned</option>
+              <option value="sold">Sold</option>
+            </select>
+          </div>
+          <select name="owningLlcId" class="w-full border border-gray-300 rounded-lg px-3 py-2 focus-ring">
+            <option value="">Owning LLC (optional)</option>
+          </select>
+          <textarea name="propNotes" rows="2" placeholder="Notes" class="w-full border border-gray-300 rounded-lg px-3 py-2 focus-ring"></textarea>
+        </div>
+
         </div>
 
         <div id="formError" class="hidden text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2"></div>
@@ -880,27 +957,27 @@
 
 <script>
   // Boot marker
-  window.__SUMMIT_CRM_VERSION__ = 'v1.5.9';
-  console.log("Summit CRM boot OK v1.5.9 (summitcrm)");
+  window.__DEALFLOW_VERSION__ = "1.5.5";
+  console.log("DealFlow Pro boot OK v1.5.6 (summitcrm)");
 
   // Sync sidebar/app version label
   try {
-    const v = window.__Summit_CRM_VERSION__ ? `v${window.__Summit_CRM_VERSION__}` : "";
+    const v = window.__DEALFLOW_VERSION__ ? `v${window.__DEALFLOW_VERSION__}` : "";
     const el = document.getElementById("appVersion");
     if (el) el.textContent = `CRM ${v} (cloud sync)`;
   } catch (_) {}
 
 
     /*****************************************************************
-     * Working v1.5.9 CRM - Single-file, localStorage persistence.
+     * Working v1.5.6 CRM - Single-file, localStorage persistence.
      * Enhancements:
      * - Full Edit support (Contacts, Investors, Deals, Projects, Tasks, Appointments)
      * - Appointment end time auto-sync to start time (default +90m, and prevents end<start)
      *****************************************************************/
 
     // ---------- Utilities ----------
-    const BASE_STORAGE_KEY = "Summit_CRM_state_v1.5.9";
-    const BASE_META_KEY = "Summit_CRM_meta_v1.5.9";
+    const BASE_STORAGE_KEY = "dealflowpro_state_v1.5.6";
+    const BASE_META_KEY = "dealflowpro_meta_v1.5.6";
 
     function getStorageKey() {
       const uid = window.firebaseCRM?.getUid?.();
@@ -1053,7 +1130,9 @@
       projects: [],
       tasks: [],
       appointments: [],
-      activities: []
+      activities: [],
+      llcs: [],
+      properties: []
     };
 
     function loadMeta() {
@@ -1132,6 +1211,8 @@
       if (type === 'project') return 'projects';
       if (type === 'task') return 'tasks';
       if (type === 'appointment') return 'appointments';
+      if (type === 'llc') return 'llcs';
+      if (type === 'property') return 'properties';
       return null;
     }
 
@@ -1154,10 +1235,7 @@
         completed: false,
         completed_at: null,
         created_at: nowIso(),
-        link,
-        zoom_join_url: (zoom_join_url||"").trim(),
-        zoom_meeting_id: (zoom_meeting_id||"").trim(),
-        zoom_passcode: (zoom_passcode||"").trim()
+        link
       };
       state.tasks.unshift(t);
       return t;
@@ -1247,7 +1325,7 @@
       addActivity(`Project "${project.name}" created; template tasks generated.`, { project_id: project.id });
     }
 
-    function createAppointment({ title, start_at, end_at, location=null, notes="", link=null, zoom_join_url="", zoom_meeting_id="", zoom_passcode="" }) {
+    function createAppointment({ title, start_at, end_at, location="", notes="", link=null }) {
       const appt = {
         id: uid('appt'),
         title,
@@ -1255,9 +1333,6 @@
         end_at,
         location,
         notes,
-        zoom_join_url,
-        zoom_meeting_id,
-        zoom_passcode,
         created_at: nowIso(),
         link
       };
@@ -1278,6 +1353,58 @@
       }
 
       return appt;
+    }
+
+    // ---------- Rendering ----------
+    function setView(view) {
+      currentView = view;
+      document.querySelectorAll('[data-view]').forEach(s => s.classList.toggle('hidden', s.dataset.view !== view));
+      document.querySelectorAll('[data-nav]').forEach(a => a.classList.toggle('active', a.dataset.nav === view));
+      // Mode 1: instant local rerender, optional throttled cloud pull.
+      try { renderCurrentTab(); } catch (_) { try { renderAll(); } catch (_) {} }
+      maybeCloudPull(true);
+    }
+
+    let currentView = 'dashboard';
+    let lastCloudPullMs = 0;
+
+    function renderCurrentTab() {
+      switch (currentView) {
+        case 'dashboard': renderDashboard(); break;
+        case 'contacts': renderContacts(); break;
+        case 'investors': renderInvestors(); break;
+        case 'deals': renderDeals(); break;
+        case 'projects': renderProjects(); break;
+        case 'llcs': renderLLCs(); break;
+        case 'properties': renderProperties(); break;
+        case 'tasks': renderTasks(); break;
+        case 'calendar': renderAppointments(); break;
+        case 'activity': renderActivity(); break;
+        default: renderAll(); break;
+      }
+    }
+
+    async function maybeCloudPull(silent=true) {
+      if (!isSignedIn || !cloudReady) return;
+      const now = Date.now();
+      if (now - lastCloudPullMs < 60000) return; // Mode 1: throttle pulls
+      lastCloudPullMs = now;
+      try {
+        await cloudSyncPullIfAvailable({ silent });
+      } catch (e) {
+        console.warn('Cloud pull failed:', e);
+      }
+    }
+
+    // Pull when the tab regains focus (throttled)
+    window.addEventListener('focus', () => { maybeCloudPull(true); });
+
+
+    function stageBadge(enumName, key) {
+      const def = getEnum(enumName, key);
+      if (!def) return `<span class="px-2 py-1 rounded-full text-xs bg-gray-100 text-gray-800">—</span>`;
+      const cls = def.cls ? def.cls : 'bg-gray-100 text-gray-800';
+      return `<span class="${cls} px-2 py-1 rounded-full text-xs">${def.label}</span>`;
     }
 
     function linkLabel(link) {
@@ -1629,7 +1756,97 @@
       }).join('');
     }
 
-    function renderTasks() {
+    
+    function renderLLCs() {
+      const host = document.getElementById('llcTable');
+      if (!host) return;
+      const rows = state.llcs || [];
+      if (!rows.length) {
+        host.innerHTML = 'No LLCs yet.';
+        return;
+      }
+
+      const fmtDate = (iso) => iso ? new Date(iso).toLocaleDateString() : '';
+      host.innerHTML = `
+        <div class="overflow-x-auto">
+          <table class="min-w-full text-sm">
+            <thead class="bg-gray-50 text-gray-600">
+              <tr>
+                <th class="text-left px-4 py-2">Name</th>
+                <th class="text-left px-4 py-2">State</th>
+                <th class="text-left px-4 py-2">Status</th>
+                <th class="text-left px-4 py-2">Formed</th>
+                <th class="text-left px-4 py-2">EIN</th>
+                <th class="text-right px-4 py-2">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rows.map(l => `
+                <tr class="border-t">
+                  <td class="px-4 py-2 font-medium text-gray-900">${es(l.name)}</td>
+                  <td class="px-4 py-2">${es(l.state_code || '')}</td>
+                  <td class="px-4 py-2">${es((l.status||'').replaceAll('_',' '))}</td>
+                  <td class="px-4 py-2">${es(fmtDate(l.formation_date))}</td>
+                  <td class="px-4 py-2">${es(l.ein || '')}</td>
+                  <td class="px-4 py-2 text-right">
+                    <button class="px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded" data-action="llc-edit" data-id="${l.id}">Edit</button>
+                    <button class="px-2 py-1 text-xs bg-red-50 hover:bg-red-100 text-red-700 rounded" data-action="llc-del" data-id="${l.id}">Delete</button>
+                  </td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      `;
+    }
+
+    function renderProperties() {
+      const host = document.getElementById('propertyTable');
+      if (!host) return;
+      const rows = state.properties || [];
+      if (!rows.length) {
+        host.innerHTML = 'No properties yet.';
+        return;
+      }
+
+      const fmtDate = (iso) => iso ? new Date(iso).toLocaleDateString() : '';
+      const llcName = (id) => (state.llcs || []).find(x => x.id === id)?.name || '';
+
+      host.innerHTML = `
+        <div class="overflow-x-auto">
+          <table class="min-w-full text-sm">
+            <thead class="bg-gray-50 text-gray-600">
+              <tr>
+                <th class="text-left px-4 py-2">Name</th>
+                <th class="text-left px-4 py-2">Location</th>
+                <th class="text-left px-4 py-2">Status</th>
+                <th class="text-left px-4 py-2">Owning LLC</th>
+                <th class="text-left px-4 py-2">Purchase</th>
+                <th class="text-right px-4 py-2">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rows.map(p => {
+                const loc = [p.city, p.state_code].filter(Boolean).join(', ') || p.address || '';
+                return `
+                <tr class="border-t">
+                  <td class="px-4 py-2 font-medium text-gray-900">${es(p.name)}</td>
+                  <td class="px-4 py-2">${es(loc)}</td>
+                  <td class="px-4 py-2">${es((p.status||'').replaceAll('_',' '))}</td>
+                  <td class="px-4 py-2">${es(llcName(p.owning_llc_id))}</td>
+                  <td class="px-4 py-2">${es(fmtDate(p.purchase_date))}</td>
+                  <td class="px-4 py-2 text-right">
+                    <button class="px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded" data-action="property-edit" data-id="${p.id}">Edit</button>
+                    <button class="px-2 py-1 text-xs bg-red-50 hover:bg-red-100 text-red-700 rounded" data-action="property-del" data-id="${p.id}">Delete</button>
+                  </td>
+                </tr>`;
+              }).join('')}
+            </tbody>
+          </table>
+        </div>
+      `;
+    }
+function renderTasks() {
       const q = (document.getElementById('tasksSearch').value || "").toLowerCase().trim();
       const filter = document.getElementById('tasksFilter').value || "all";
       const tbody = document.getElementById('tasksTable');
@@ -1717,12 +1934,9 @@
             <h4 class="font-medium">${escapeHtml(a.title)}</h4>
             <p class="text-sm text-gray-600">${escapeHtml(formatDateTimeShort(a.start_at))} - ${escapeHtml(formatDateTimeShort(a.end_at))}</p>
             <p class="text-sm text-gray-600">Location: ${escapeHtml(a.location || '—')} • ${escapeHtml(linkLabel(a.link))}</p>
-            ${a.zoom_join_url ? `<p class="text-sm text-gray-700 mt-2">Zoom: <a class="text-indigo-600 underline" href="${escapeHtml(a.zoom_join_url)}" target="_blank" rel="noopener">Join link</a>${a.zoom_meeting_id ? ` • ID: ${escapeHtml(a.zoom_meeting_id)}` : ``}${a.zoom_passcode ? ` • Pass: ${escapeHtml(a.zoom_passcode)}` : ``}</p>` : ``}
             ${a.notes ? `<p class="text-sm text-gray-700 mt-2">${escapeHtml(a.notes)}</p>` : ''}
           </div>
           <div class="text-right space-x-2">
-            ${a.zoom_join_url ? `<button class="text-indigo-600 hover:text-indigo-800 text-sm font-medium" data-action="appointment-zoom-join" data-id="${a.id}">Join Zoom</button>
-            <button class="text-indigo-600 hover:text-indigo-800 text-sm font-medium" data-action="appointment-zoom-copy" data-id="${a.id}">Copy Invite</button>` : ""}
             <button class="text-gray-700 hover:text-gray-900 text-sm font-medium"
                     data-action="appointment-edit" data-id="${a.id}">Edit</button>
             <button class="text-red-600 hover:text-red-800 text-sm font-medium"
@@ -1844,6 +2058,8 @@
       renderInvestors();
       renderDeals();
       renderProjects();
+      renderLLCs();
+      renderProperties();
       renderTasks();
       renderAppointments();
       renderActivity();
@@ -1868,6 +2084,31 @@
     // ---------- Auth UI + Cloud Sync ----------
     const authBtn = document.getElementById('authBtn');
     const authStatus = document.getElementById('authStatus');
+
+    // Sidebar identity (bottom-left)
+    const sidebarUserName = document.getElementById('sidebarUserName');
+    const sidebarUserMode = document.getElementById('sidebarUserMode');
+    const sidebarAvatar   = document.getElementById('sidebarAvatar');
+
+    // Primary admin (case-insensitive match)
+    const ADMIN_EMAIL = 'kelanlee@summitfinancialanalytics.com';
+
+    function applySidebarIdentity(user) {
+      const email = (user?.email || '').toLowerCase();
+      const isAdmin = !!email && email === ADMIN_EMAIL.toLowerCase();
+
+      const displayName = user ? (isAdmin ? 'Admin User' : 'Reviewer') : 'Admin User';
+      const modeLabel   = user ? 'Cloud save' : 'Local mode';
+
+      if (sidebarUserName) sidebarUserName.textContent = displayName;
+      if (sidebarUserMode) sidebarUserMode.textContent = modeLabel;
+
+      if (sidebarAvatar) {
+        const avatarName = user ? (isAdmin ? 'Admin+User' : 'Reviewer') : 'Admin+User';
+        sidebarAvatar.src = `https://ui-avatars.com/api/?name=${avatarName}&background=6366f1&color=fff`;
+      }
+    }
+
 
     const authModal = document.getElementById('authModal');
     const closeAuthModalBtn = document.getElementById('closeAuthModal');
@@ -1902,6 +2143,9 @@
       const label = user ? `Signed in: ${user.email || 'account'}` : 'Local mode';
       if (authStatus) authStatus.textContent = label;
 
+      // Keep sidebar (bottom-left) in sync with auth state
+      try { applySidebarIdentity(user); } catch (_) {}
+
       if (authBtn) {
         authBtn.textContent = user ? 'Sign out' : 'Sign in';
         authBtn.classList.toggle('bg-gray-900', !user);
@@ -1921,6 +2165,9 @@
 
 
 
+
+    // Initialize sidebar identity to Local mode immediately.
+    try { applySidebarIdentity(null); } catch (_) {}
 
     // Initialize auth UI immediately if Firebase is already available.
     try {
@@ -2087,7 +2334,9 @@
       deal: document.getElementById('formDeal'),
       project: document.getElementById('formProject'),
       task: document.getElementById('formTask'),
-      appointment: document.getElementById('formAppointment')
+      appointment: document.getElementById('formAppointment'),
+      llc: document.getElementById('formLLC'),
+      property: document.getElementById('formProperty')
     };
 
     function setFormError(msg) {
@@ -2246,9 +2495,6 @@
           startAt: record.start_at,
           endAt: record.end_at,
           location: record.location || '',
-          zoomJoinUrl: record.zoom_join_url || '',
-          zoomMeetingId: record.zoom_meeting_id || '',
-          zoomPasscode: record.zoom_passcode || '',
           apptNotes: record.notes || '',
           apptLinkType: record.link?.type || '',
         });
@@ -2262,6 +2508,37 @@
         } else {
           apptLinkIdEl.classList.add('hidden');
         }
+      }
+
+
+      if (type === 'llc') {
+        setFormValues(formMap.llc, {
+          llcName: record.name,
+          state: record.state_code || '',
+          status: record.status || 'active',
+          formationDate: record.formation_date || '',
+          ein: record.ein || '',
+          registeredAgent: record.registered_agent || '',
+          llcNotes: record.notes || ''
+        });
+      }
+
+      if (type === 'property') {
+        setFormValues(formMap.property, {
+          propName: record.name,
+          address: record.address || '',
+          city: record.city || '',
+          propState: record.state_code || '',
+          zip: record.zip || '',
+          county: record.county || '',
+          parcel: record.parcel || '',
+          propStatus: record.status || 'prospect',
+          purchaseDate: record.purchase_date || '',
+          owningLlcId: record.owning_llc_id || '',
+          propNotes: record.notes || ''
+        });
+        // Ensure LLC options are current
+        try { populateFormSelects('property'); } catch (_) {}
       }
 
       // Update title
@@ -2342,6 +2619,15 @@
         if (startAt) startAt.value = toLocalDateTimeInputValue(inHour);
         if (endAt) endAt.value = toLocalDateTimeInputValue(in90);
       }
+      // LLC / Property tracking selects
+      if (formMap.property) {
+        const ownSel = formMap.property.querySelector('[name="owningLlcId"]');
+        setOptions(ownSel,
+          state.llcs.map(l => ({ value:l.id, label:l.name })),
+          state.llcs.length ? null : "No LLCs yet (optional)"
+        );
+      }
+
     }
 
     function populateLinkIdSelect(selectEl, type) {
@@ -2496,6 +2782,86 @@
       return true;
     }
 
+
+    // ---------- LLC / Property Tracking ----------
+    function createLLC({ name, state_code="", status="active", formation_date=null, ein="", registered_agent="", notes="" }) {
+      const llc = {
+        id: uid('llc'),
+        name,
+        state_code,
+        status,
+        formation_date: formation_date ? new Date(formation_date).toISOString() : null,
+        ein,
+        registered_agent,
+        notes,
+        created_at: nowIso(),
+        updated_at: nowIso()
+      };
+      state.llcs.unshift(llc);
+      addActivity(`LLC created: ${name}`, { llc_id: llc.id });
+      return llc;
+    }
+
+    function updateLLC(id, patch) {
+      const l = findById('llcs', id);
+      if (!l) return false;
+      Object.assign(l, patch);
+      l.formation_date = l.formation_date ? new Date(l.formation_date).toISOString() : null;
+      l.updated_at = nowIso();
+      addActivity(`LLC updated: ${l.name}`, { llc_id: l.id });
+      return true;
+    }
+
+    function deleteLLC(id) {
+      const idx = state.llcs.findIndex(x => x.id === id);
+      if (idx < 0) return false;
+      const name = state.llcs[idx].name;
+      state.llcs.splice(idx, 1);
+      addActivity(`LLC deleted: ${name}`, { llc_id: id });
+      return true;
+    }
+
+    function createProperty({ name, address="", city="", state_code="", zip="", county="", parcel="", status="prospect", purchase_date=null, owning_llc_id="", notes="" }) {
+      const prop = {
+        id: uid('prop'),
+        name,
+        address,
+        city,
+        state_code,
+        zip,
+        county,
+        parcel,
+        status,
+        purchase_date: purchase_date ? new Date(purchase_date).toISOString() : null,
+        owning_llc_id: owning_llc_id || "",
+        notes,
+        created_at: nowIso(),
+        updated_at: nowIso()
+      };
+      state.properties.unshift(prop);
+      addActivity(`Property created: ${name}`, { property_id: prop.id });
+      return prop;
+    }
+
+    function updateProperty(id, patch) {
+      const p = findById('properties', id);
+      if (!p) return false;
+      Object.assign(p, patch);
+      p.purchase_date = p.purchase_date ? new Date(p.purchase_date).toISOString() : null;
+      p.updated_at = nowIso();
+      addActivity(`Property updated: ${p.name}`, { property_id: p.id });
+      return true;
+    }
+
+    function deleteProperty(id) {
+      const idx = state.properties.findIndex(x => x.id === id);
+      if (idx < 0) return false;
+      const name = state.properties[idx].name;
+      state.properties.splice(idx, 1);
+      addActivity(`Property deleted: ${name}`, { property_id: id });
+      return true;
+    }
+
     function logContactTouch(contactId) {
       const c = state.contacts.find(x => x.id === contactId);
       if (!c) return;
@@ -2558,7 +2924,7 @@
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `Summit_CRM_${kind}_${new Date().toISOString().slice(0,10)}.json`;
+      a.download = `dealflowpro_${kind}_${new Date().toISOString().slice(0,10)}.json`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -2622,27 +2988,27 @@
     // Long-lived auth/UI/state watcher:
     // If auth restores *after* initial startup window, ensure we (1) flip UI to signed-in,
     // (2) reload the per-uid local state, and (3) reconcile with cloud once.
-    let __Summit_CRMLastUid = null;
-    let __Summit_CRMReconciling = false;
+    let __dealflowLastUid = null;
+    let __dealflowReconciling = false;
     setInterval(async () => {
       try {
         const uid = window.firebaseCRM?.getUid?.() || null;
         const email = window.firebaseCRM?.getEmail?.() || null;
 
-        if (uid && uid !== __Summit_CRMLastUid) {
-          __Summit_LastUid = uid;
+        if (uid && uid !== __dealflowLastUid) {
+          __dealflowLastUid = uid;
           // Force UI to signed-in immediately.
           try { updateAuthUI({ uid, email }); } catch (_) {}
           // Reload local state for this uid and reconcile once.
-          if (!__Summit_CRMReconciling) {
-            __Summit_CRMReconciling = true;
+          if (!__dealflowReconciling) {
+            __dealflowReconciling = true;
             try { await reconcileLocalAndCloud({ uid, email }); } catch (_) {}
-            __Summit_CRMReconciling = false;
+            __dealflowReconciling = false;
           }
         }
 
         // If we truly have no uid, keep lastUid null (but do not overwrite signed-in UI if uid exists).
-        if (!uid) __Summit_CRMLastUid = null;
+        if (!uid) __dealflowLastUid = null;
       } catch (_) {}
     }, 1000);
 
@@ -2700,45 +3066,8 @@ function handleDelegatedEvent(e) {
     if (action === 'project-edit') { openEditModal('project', id); return; }
     if (action === 'task-edit') { openEditModal('task', id); return; }
     if (action === 'appointment-edit') { openEditModal('appointment', id); return; }
-
-    if (action === 'appointment-zoom-join') {
-      const a = findById('appointments', id);
-      const url = a?.zoom_join_url || '';
-      if (!url) { showNotification('No Zoom link on this appointment.', 'error'); return; }
-      window.open(url, '_blank', 'noopener');
-      return;
-    }
-    if (action === 'appointment-zoom-copy') {
-      const a = findById('appointments', id);
-      if (!a) return;
-      const startTxt = a.start_at ? formatDateTimeShort(a.start_at) : 'TBD';
-      const endTxt = a.end_at ? formatDateTimeShort(a.end_at) : '';
-      const when = endTxt ? `${startTxt} - ${endTxt}` : startTxt;
-      const lines = [
-        a.title || 'Zoom Meeting',
-        `When: ${when}`,
-        a.location ? `Location: ${a.location}` : null,
-        a.zoom_join_url ? `Join Zoom: ${a.zoom_join_url}` : null,
-        a.zoom_meeting_id ? `Meeting ID: ${a.zoom_meeting_id}` : null,
-        a.zoom_passcode ? `Passcode: ${a.zoom_passcode}` : null,
-        a.notes ? `Notes: ${a.notes}` : null
-      ].filter(Boolean);
-      const text = lines.join('\n');
-      try {
-        await navigator.clipboard.writeText(text);
-        showNotification('Invite copied to clipboard.', 'success');
-      } catch (e) {
-        const ta = document.createElement('textarea');
-        ta.value = text;
-        document.body.appendChild(ta);
-        ta.select();
-        document.execCommand('copy');
-        document.body.removeChild(ta);
-        showNotification('Invite copied.', 'success');
-      }
-      return;
-    }
-
+    if (action === 'llc-edit') { openEditModal('llc', id); return; }
+    if (action === 'property-edit') { openEditModal('property', id); return; }
 
     if (action === 'task-complete') {
       completeTask(id);
@@ -2751,6 +3080,22 @@ function handleDelegatedEvent(e) {
         deleteById('tasks', id);
         saveState(true);
         renderAll();
+      }
+      return;
+    }
+    if (action === 'llc-del') {
+      if (confirm('Delete this LLC?')) {
+        deleteLLC(id);
+        saveState(true);
+        renderLLCs();
+      }
+      return;
+    }
+    if (action === 'property-del') {
+      if (confirm('Delete this property?')) {
+        deleteProperty(id);
+        saveState(true);
+        renderProperties();
       }
       return;
     }
@@ -3139,9 +3484,6 @@ document.addEventListener('touchend', handleDelegatedEvent, true);
             start_at: start.toISOString(),
             end_at: end.toISOString(),
             location: (data.location||"").trim(),
-            zoom_join_url: (data.zoomJoinUrl||"").trim(),
-            zoom_meeting_id: (data.zoomMeetingId||"").trim(),
-            zoom_passcode: (data.zoomPasscode||"").trim(),
             notes: (data.apptNotes||"").trim(),
             link
           };
@@ -3152,6 +3494,56 @@ document.addEventListener('touchend', handleDelegatedEvent, true);
           } else {
             updateAppointment(editing.id, patch);
             showNotification('Appointment updated.', 'success');
+          }
+        }
+
+
+        if (type === 'llc') {
+          const name = (data.llcName || "").trim();
+          if (!name) return setFormError('LLC Name is required.');
+          const patch = {
+            name,
+            state_code: (data.state || "").trim(),
+            status: data.status || 'active',
+            formation_date: data.formationDate || null,
+            ein: (data.ein || "").trim(),
+            registered_agent: (data.registeredAgent || "").trim(),
+            notes: (data.llcNotes || "").trim()
+          };
+
+          if (!isEdit) {
+            createLLC(patch);
+            showNotification('LLC added.', 'success');
+          } else {
+            updateLLC(editing.id, patch);
+            showNotification('LLC updated.', 'success');
+          }
+        }
+
+        if (type === 'property') {
+          const name = (data.propName || "").trim();
+          if (!name) return setFormError('Property Name is required.');
+
+          const patch = {
+            name,
+            address: (data.address || "").trim(),
+            city: (data.city || "").trim(),
+            state_code: (data.propState || "").trim(),
+            zip: (data.zip || "").trim(),
+            county: (data.county || "").trim(),
+            parcel: (data.parcel || "").trim(),
+            status: data.propStatus || 'prospect',
+            purchase_date: data.purchaseDate || null,
+            owning_llc_id: data.owningLlcId || "",
+            notes: (data.propNotes || "").trim()
+          };
+
+          if (!isEdit) {
+            createProperty(patch);
+            showNotification('Property added.', 'success');
+          } else {
+            updateProperty(editing.id, patch);
+            showNotification('Property updated.', 'success');
           }
         }
 
@@ -3250,7 +3642,7 @@ document.addEventListener('touchend', handleDelegatedEvent, true);
         showNotification('Tip: Click "Seed Demo Data" in Quick Add modal.', 'info');
       }
 
-      console.log('Summit CRM v1.5.9 loaded. Data stored in localStorage key:', getStorageKey());
+      console.log('DealFlow Pro v1.5.6 loaded. Data stored in localStorage key:', getStorageKey());
     }
 
     init();
