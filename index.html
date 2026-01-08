@@ -432,6 +432,10 @@
           <div class="bg-white rounded-xl shadow-md overflow-hidden">
             <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between gap-4">
               <input id="dealsSearch" class="w-full border border-gray-300 rounded-lg px-3 py-2 focus-ring" placeholder="Filter deals by name, type, stage...">
+              <label class="ml-4 flex items-center gap-2 text-sm text-gray-600 whitespace-nowrap">
+                <input id="showAssetMgmtDeals" type="checkbox" class="h-4 w-4 rounded border-gray-300">
+                Show Asset Mgmt
+              </label>
             </div>
 
             <div class="p-6 overflow-x-auto">
@@ -516,7 +520,7 @@
           <div id="propertyTable" class="p-4 text-sm text-gray-600">No properties yet.</div>
         </div>
       </section>
-data-view="tasks" class="hidden">
+		<data-view="tasks" class="hidden">
           <div class="flex items-start justify-between gap-4 mb-6">
             <div>
               <h2 class="text-2xl font-bold text-gray-900">Tasks</h2>
@@ -1662,8 +1666,10 @@ data-view="tasks" class="hidden">
 
     function renderDeals() {
       const q = (document.getElementById('dealsSearch').value || "").toLowerCase().trim();
+      const showAsset = !!document.getElementById('showAssetMgmtDeals')?.checked;
       const tbody = document.getElementById('dealsTable');
       const filtered = state.deals.filter(d => {
+        if (!showAsset && d.stage === 'asset_mgmt') return false;
         const type = getEnum('dealTypes', d.type)?.label || d.type;
         const stage = getEnum('dealStages', d.stage)?.label || d.stage;
         const hay = `${d.name} ${type} ${stage} ${d.notes||""}`.toLowerCase();
@@ -1803,7 +1809,10 @@ data-view="tasks" class="hidden">
     function renderProperties() {
       const host = document.getElementById('propertyTable');
       if (!host) return;
-      const rows = state.properties || [];
+      
+      // Asset Mgmt Deals (Deals with stage === 'asset_mgmt')
+      const amDeals = (state.deals || []).filter(d => d.stage === 'asset_mgmt');
+const rows = state.properties || [];
       if (!rows.length) {
         host.innerHTML = 'No properties yet.';
         return;
@@ -1813,6 +1822,46 @@ data-view="tasks" class="hidden">
       const llcName = (id) => (state.llcs || []).find(x => x.id === id)?.name || '';
 
       host.innerHTML = `
+        ${amDeals.length ? `
+          <div class="mb-4 p-4 bg-blue-50 rounded-lg">
+            <div class="flex items-center justify-between">
+              <div>
+                <div class="font-semibold text-blue-900">Asset Management Deals</div>
+                <div class="text-sm text-blue-800">Deals marked Asset Mgmt are shown here. Create/Link a Property record if needed.</div>
+              </div>
+            </div>
+            <div class="overflow-x-auto mt-3">
+              <table class="min-w-full text-sm">
+                <thead class="text-blue-900">
+                  <tr>
+                    <th class="text-left px-3 py-2">Deal</th>
+                    <th class="text-left px-3 py-2">Linked Property</th>
+                    <th class="text-left px-3 py-2">Target / Purchase</th>
+                    <th class="text-right px-3 py-2">Actions</th>
+                  </tr>
+                </thead>
+                <tbody class="bg-white rounded">
+                  ${amDeals.map(d => {
+                    const p = d.asset_property_id ? findPropertyById(d.asset_property_id) : (state.properties||[]).find(x => x.source_deal_id === d.id);
+                    const pname = p ? p.name : '—';
+                    const pdate = d.close_target_date ? new Date(d.close_target_date).toLocaleDateString() : '';
+                    return `
+                      <tr class="border-t">
+                        <td class="px-3 py-2 font-medium">${es(d.name)}</td>
+                        <td class="px-3 py-2">${es(pname)}</td>
+                        <td class="px-3 py-2">${es(pdate)}</td>
+                        <td class="px-3 py-2 text-right space-x-2">
+                          ${p ? '' : `<button class="px-2 py-1 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded" data-action="deal-to-property" data-id="${d.id}">Create Property</button>`}
+                          <button class="px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 text-gray-800 rounded" data-action="deal-edit" data-id="${d.id}">Open Deal</button>
+                        </td>
+                      </tr>`;
+                  }).join('')}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        ` : ''}
+
         <div class="overflow-x-auto">
           <table class="min-w-full text-sm">
             <thead class="bg-gray-50 text-gray-600">
@@ -2914,6 +2963,7 @@ function renderTasks() {
       addActivity(`Deal "${d.name}" advanced to ${getEnum('dealStages', next)?.label || next}.`, { deal_id: d.id });
 
       if (next === 'due_diligence') generateDDChecklist(d);
+      if (next === 'asset_mgmt') { try { moveDealToAssetMgmt(d); } catch (_) {} }
       showNotification(`Deal advanced to ${getEnum('dealStages', next)?.label || next}`, 'success');
     }
 
@@ -3129,7 +3179,14 @@ function handleDelegatedEvent(e) {
       }
       return;
     }
-    if (action === 'deal-advance') {
+    
+    if (action === 'deal-to-property') {
+      moveDealToAssetMgmt(id);
+      saveState(true);
+      renderAll();
+      return;
+    }
+if (action === 'deal-advance') {
       advanceDealStage(id);
       saveState();
       renderAll();
@@ -3648,4 +3705,53 @@ document.addEventListener('touchend', handleDelegatedEvent, true);
     init();
   </script>
 </body>
-</html>
+</html
+
+    // ---------- Asset Management Bridge ----------
+    function findPropertyById(pid) {
+      return (state.properties || []).find(p => p.id === pid);
+    }
+
+    function moveDealToAssetMgmt(dealOrId) {
+      const d = typeof dealOrId === 'string' ? (state.deals || []).find(x => x.id === dealOrId) : dealOrId;
+      if (!d) return null;
+
+      // If already linked, just ensure it's present.
+      if (d.asset_property_id && findPropertyById(d.asset_property_id)) return findPropertyById(d.asset_property_id);
+
+      state.properties = state.properties || [];
+
+      // Attempt to reuse an existing property by deal linkage
+      const existing = state.properties.find(p => p.source_deal_id === d.id);
+      if (existing) {
+        d.asset_property_id = existing.id;
+        return existing;
+      }
+
+      // Create a new Property record from the Deal.
+      const pid = uid('prop');
+      const prop = {
+        id: pid,
+        name: d.name || 'Property',
+        address: d.address || '',
+        city: d.city || '',
+        state_code: d.state_code || d.state || '',
+        zip: d.zip || '',
+        county: d.county || '',
+        parcel_apn: d.parcel_apn || d.apn || '',
+        status: 'active',
+        owning_llc_id: d.owning_llc_id || '',
+        purchase_date: d.close_target_date || '',
+        notes: d.notes ? `Created from Deal (${d.id})\n\n${d.notes}` : `Created from Deal (${d.id})`,
+        source_deal_id: d.id,
+        linked_deal_ids: [d.id]
+      };
+
+      state.properties.push(prop);
+      d.asset_property_id = pid;
+
+      addActivity(`Deal "${d.name}" moved to Asset Mgmt and a Property record was created.`, { deal_id: d.id, property_id: pid });
+      showNotification('Moved to Asset Mgmt (Property created).', 'success');
+      return prop;
+    }
+>
