@@ -3758,56 +3758,55 @@ document.addEventListener('touchend', handleDelegatedEvent, true);
       console.log('DealFlow Pro v1.1.16 loaded. Data stored in localStorage key:', getStorageKey());
     }
 
-    init();
-  </script>
-</body>
-</html
-
-    // ---------- Asset Management Bridge ----------
+        // ---------- Asset Management Bridge ----------
     function findPropertyById(pid) {
-      return (state.properties || []).find(p => p.id === pid);
+    return (state.properties || []).find(p => p.id === pid);
     }
 
     function moveDealToAssetMgmt(dealOrId) {
-      const d = typeof dealOrId === 'string' ? (state.deals || []).find(x => x.id === dealOrId) : dealOrId;
-      if (!d) return null;
+    const d = typeof dealOrId === 'string' ? (state.deals || []).find(x => x.id === dealOrId) : dealOrId;
+    if (!d) return null;
 
-      // If already linked, just ensure it's present.
-      if (d.asset_property_id && findPropertyById(d.asset_property_id)) return findPropertyById(d.asset_property_id);
+    // If already linked, just ensure it's present.
+    if (d.asset_property_id && findPropertyById(d.asset_property_id)) return findPropertyById(d.asset_property_id);
 
-      state.properties = state.properties || [];
+    state.properties = state.properties || [];
 
-      // Attempt to reuse an existing property by deal linkage
-      const existing = state.properties.find(p => p.source_deal_id === d.id);
-      if (existing) {
-        d.asset_property_id = existing.id;
-        return existing;
-      }
-
-      // Create a new Property record from the Deal.
-      const pid = uid('prop');
-      const prop = {
-        id: pid,
-        name: d.name || 'Property',
-        address: d.address || '',
-        city: d.city || '',
-        state_code: d.state_code || d.state || '',
-        zip: d.zip || '',
-        county: d.county || '',
-        parcel_apn: d.parcel_apn || d.apn || '',
-        status: 'active',
-        owning_llc_id: d.owning_llc_id || '',
-        purchase_date: d.close_target_date || '',
-        notes: d.notes ? `Created from Deal (${d.id})\n\n${d.notes}` : `Created from Deal (${d.id})`,
-        source_deal_id: d.id,
-        linked_deal_ids: [d.id]
-      };
-
-      state.properties.push(prop);
-      d.asset_property_id = pid;
-
-      addActivity(`Deal "${d.name}" moved to Asset Mgmt and a Property record was created.`, { deal_id: d.id, property_id: pid });
-      showNotification('Moved to Asset Mgmt (Property created).', 'success');
-      return prop;
+    // Attempt to reuse an existing property by deal linkage
+    const existing = state.properties.find(p => p.source_deal_id === d.id);
+    if (existing) {
+    d.asset_property_id = existing.id;
+    return existing;
     }
->
+
+    // Create a new Property record from the Deal.
+    const pid = uid('prop');
+    const prop = {
+    id: pid,
+    name: d.name || 'Property',
+    address: d.address || '',
+    city: d.city || '',
+    state_code: d.state_code || d.state || '',
+    zip: d.zip || '',
+    county: d.county || '',
+    parcel_apn: d.parcel_apn || d.apn || '',
+    status: 'active',
+    owning_llc_id: d.owning_llc_id || '',
+    purchase_date: d.close_target_date || '',
+    notes: d.notes ? `Created from Deal (${d.id})\n\n${d.notes}` : `Created from Deal (${d.id})`,
+    source_deal_id: d.id,
+    linked_deal_ids: [d.id]
+    };
+
+    state.properties.push(prop);
+    d.asset_property_id = pid;
+
+    addActivity(`Deal "${d.name}" moved to Asset Mgmt and a Property record was created.`, { deal_id: d.id, property_id: pid });
+    showNotification('Moved to Asset Mgmt (Property created).', 'success');
+    return prop;
+    }
+
+init();
+  </script>
+</body>
+</html>
