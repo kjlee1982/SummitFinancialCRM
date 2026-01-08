@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>DealFlow Pro - CRM (Working v1.5.6)</title>
+  <title>DealFlow Pro - CRM (Working v1.1.16)</title>
 
   <!-- Tailwind (prototype CDN) -->
   <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
@@ -836,6 +836,25 @@
           </div>
           <div class="grid grid-cols-2 gap-3">
             <input name="purchaseDate" type="date" class="w-full border border-gray-300 rounded-lg px-3 py-2 focus-ring">
+            <select name="propType" class="w-full border border-gray-300 rounded-lg px-3 py-2 focus-ring">
+  <option value="">Property Type (optional)</option>
+  <option value="multifamily">Multifamily (5+)</option>
+  <option value="duplex">Duplex</option>
+  <option value="triplex">Triplex</option>
+  <option value="quadplex">Quadplex</option>
+  <option value="single_family">Single Family</option>
+  <option value="condo_townhome">Condo / Townhome</option>
+  <option value="mixed_use">Mixed-Use</option>
+  <option value="rv_park">RV Park</option>
+  <option value="mobile_home_park">Mobile Home Park</option>
+  <option value="self_storage">Self Storage</option>
+  <option value="industrial">Industrial</option>
+  <option value="retail">Retail</option>
+  <option value="office">Office</option>
+  <option value="land">Land</option>
+  <option value="other">Other</option>
+</select>
+
             <select name="propStatus" class="w-full border border-gray-300 rounded-lg px-3 py-2 focus-ring">
               <option value="prospect">Prospect</option>
               <option value="under_contract">Under Contract</option>
@@ -961,8 +980,8 @@
 
 <script>
   // Boot marker
-  window.__DEALFLOW_VERSION__ = "1.5.5";
-  console.log("DealFlow Pro boot OK v1.5.6 (summitcrm)");
+  window.__DEALFLOW_VERSION__ = "1.1.16";
+  console.log("DealFlow Pro boot OK v1.1.16 (summitcrm)");
 
   // Sync sidebar/app version label
   try {
@@ -973,15 +992,15 @@
 
 
     /*****************************************************************
-     * Working v1.5.6 CRM - Single-file, localStorage persistence.
+     * Working v1.1.16 CRM - Single-file, localStorage persistence.
      * Enhancements:
      * - Full Edit support (Contacts, Investors, Deals, Projects, Tasks, Appointments)
      * - Appointment end time auto-sync to start time (default +90m, and prevents end<start)
      *****************************************************************/
 
     // ---------- Utilities ----------
-    const BASE_STORAGE_KEY = "dealflowpro_state_v1.5.6";
-    const BASE_META_KEY = "dealflowpro_meta_v1.5.6";
+    const BASE_STORAGE_KEY = "dealflowpro_state_v1.1.16";
+    const BASE_META_KEY = "dealflowpro_meta_v1.1.16";
 
     function getStorageKey() {
       const uid = window.firebaseCRM?.getUid?.();
@@ -1868,6 +1887,7 @@ const rows = state.properties || [];
               <tr>
                 <th class="text-left px-4 py-2">Name</th>
                 <th class="text-left px-4 py-2">Location</th>
+                <th class="text-left px-4 py-2">Type</th>
                 <th class="text-left px-4 py-2">Status</th>
                 <th class="text-left px-4 py-2">Owning LLC</th>
                 <th class="text-left px-4 py-2">Purchase</th>
@@ -1881,6 +1901,7 @@ const rows = state.properties || [];
                 <tr class="border-t">
                   <td class="px-4 py-2 font-medium text-gray-900">${es(p.name)}</td>
                   <td class="px-4 py-2">${es(loc)}</td>
+                  <td class="px-4 py-2">${es(formatPropType(p.property_type))}</td>
                   <td class="px-4 py-2">${es((p.status||'').replaceAll('_',' '))}</td>
                   <td class="px-4 py-2">${es(llcName(p.owning_llc_id))}</td>
                   <td class="px-4 py-2">${es(fmtDate(p.purchase_date))}</td>
@@ -2123,6 +2144,31 @@ function renderTasks() {
         .replaceAll('"', '&quot;')
         .replaceAll("'", '&#039;');
     }
+
+    // ---------- Property type formatter ----------
+    function formatPropType(v) {
+      const raw = (v || '').toString().trim();
+      if (!raw) return '';
+      const map = {
+        multifamily: 'Multifamily (5+)',
+        duplex: 'Duplex',
+        triplex: 'Triplex',
+        quadplex: 'Quadplex',
+        single_family: 'Single Family',
+        condo_townhome: 'Condo / Townhome',
+        mixed_use: 'Mixed-Use',
+        rv_park: 'RV Park',
+        mobile_home_park: 'Mobile Home Park',
+        self_storage: 'Self Storage',
+        industrial: 'Industrial',
+        retail: 'Retail',
+        office: 'Office',
+        land: 'Land',
+        other: 'Other'
+      };
+      return map[raw] || raw.replaceAll('_',' ');
+    }
+
 
     // ---------- Modal helpers ----------
     const modal = document.getElementById('quickAddModal');
@@ -2581,6 +2627,7 @@ function renderTasks() {
           zip: record.zip || '',
           county: record.county || '',
           parcel: record.parcel || '',
+          propType: record.property_type || record.propType || record.type || '',
           propStatus: record.status || 'prospect',
           purchaseDate: record.purchase_date || '',
           owningLlcId: record.owning_llc_id || '',
@@ -2870,7 +2917,8 @@ function renderTasks() {
       return true;
     }
 
-    function createProperty({ name, address="", city="", state_code="", zip="", county="", parcel="", status="prospect", purchase_date=null, owning_llc_id="", notes="" }) {
+    function createProperty({ name, address="", city="", state_code="", zip="", county="", parcel="", property_type="",
+      status="prospect", purchase_date=null, owning_llc_id="", notes="" }) {
       const prop = {
         id: uid('prop'),
         name,
@@ -2880,6 +2928,7 @@ function renderTasks() {
         zip,
         county,
         parcel,
+        property_type,
         status,
         purchase_date: purchase_date ? new Date(purchase_date).toISOString() : null,
         owning_llc_id: owning_llc_id || "",
@@ -3589,6 +3638,7 @@ document.addEventListener('touchend', handleDelegatedEvent, true);
             zip: (data.zip || "").trim(),
             county: (data.county || "").trim(),
             parcel: (data.parcel || "").trim(),
+            property_type: data.propType || '',
             status: data.propStatus || 'prospect',
             purchase_date: data.purchaseDate || null,
             owning_llc_id: data.owningLlcId || "",
@@ -3699,7 +3749,7 @@ document.addEventListener('touchend', handleDelegatedEvent, true);
         showNotification('Tip: Click "Seed Demo Data" in Quick Add modal.', 'info');
       }
 
-      console.log('DealFlow Pro v1.5.6 loaded. Data stored in localStorage key:', getStorageKey());
+      console.log('DealFlow Pro v1.1.16 loaded. Data stored in localStorage key:', getStorageKey());
     }
 
     init();
