@@ -76,7 +76,7 @@
     <div class="sidebar w-64 bg-gray-900 text-gray-300 flex flex-col">
       <div class="p-6">
         <h1 class="text-2xl font-bold text-white flex items-center">
-          <i class="fas fa-chart-network mr-2"></i> DealFlow Pro
+          <i class="fas fa-chart-network mr-2"></i> Summit DealFlow Pro
         </h1>
         <p id="appVersion" class="text-sm text-gray-400 mt-1">Summit CRM v1.1.16</p>
       </div>
@@ -3029,7 +3029,7 @@ if (q && !hay.includes(q)) return false;
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `dealflowpro_${kind}_${new Date().toISOString().slice(0,10)}.json`;
+      a.download = `summit_dealflowpro_${kind}_${new Date().toISOString().slice(0,10)}.json`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -3093,27 +3093,27 @@ if (q && !hay.includes(q)) return false;
     // Long-lived auth/UI/state watcher:
     // If auth restores *after* initial startup window, ensure we (1) flip UI to signed-in,
     // (2) reload the per-uid local state, and (3) reconcile with cloud once.
-    let __dealflowLastUid = null;
-    let __dealflowReconciling = false;
+    let __summit_dealflowLastUid = null;
+    let __summit_dealflowReconciling = false;
     setInterval(async () => {
       try {
         const uid = window.firebaseCRM?.getUid?.() || null;
         const email = window.firebaseCRM?.getEmail?.() || null;
 
-        if (uid && uid !== __dealflowLastUid) {
-          __dealflowLastUid = uid;
+        if (uid && uid !== __summit_dealflowLastUid) {
+          __summit_dealflowLastUid = uid;
           // Force UI to signed-in immediately.
           try { updateAuthUI({ uid, email }); } catch (_) {}
           // Reload local state for this uid and reconcile once.
-          if (!__dealflowReconciling) {
-            __dealflowReconciling = true;
+          if (!__summit_dealflowReconciling) {
+            __summit_dealflowReconciling = true;
             try { await reconcileLocalAndCloud({ uid, email }); } catch (_) {}
-            __dealflowReconciling = false;
+            __summit_dealflowReconciling = false;
           }
         }
 
         // If we truly have no uid, keep lastUid null (but do not overwrite signed-in UI if uid exists).
-        if (!uid) __dealflowLastUid = null;
+        if (!uid) __summit_dealflowLastUid = null;
       } catch (_) {}
     }, 1000);
 
@@ -3755,7 +3755,7 @@ document.addEventListener('touchend', handleDelegatedEvent, true);
         showNotification('Tip: Click "Seed Demo Data" in Quick Add modal.', 'info');
       }
 
-      console.log('DealFlow Pro v1.1.16 loaded. Data stored in localStorage key:', getStorageKey());
+      console.log('Summit DealFlow Pro v1.1.16 loaded. Data stored in localStorage key:', getStorageKey());
     }
 
         // ---------- Asset Management Bridge ----------
