@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>DealFlow Pro - CRM (Working v1.1.16)</title>
+  <title>Summit CRM v1.1.16</title>
 
   <!-- Tailwind (prototype CDN) -->
   <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
@@ -78,7 +78,7 @@
         <h1 class="text-2xl font-bold text-white flex items-center">
           <i class="fas fa-chart-network mr-2"></i> DealFlow Pro
         </h1>
-        <p id="appVersion" class="text-sm text-gray-400 mt-1">CRM</p>
+        <p id="appVersion" class="text-sm text-gray-400 mt-1">Summit CRM v1.1.16</p>
       </div>
 
       <nav class="flex-1 px-4">
@@ -981,27 +981,23 @@
 
 <script>
   // Boot marker
-  window.__DEALFLOW_VERSION__ = "v1.1.16";
-  console.log("DealFlow Pro boot OK v1.1.16 (summitcrm)");
+  console.log("Summit CRM boot OK");
 
   // Sync sidebar/app version label
   try {
-    const v = window.__DEALFLOW_VERSION__ ? `v${window.__DEALFLOW_VERSION__}` : "";
-    const el = document.getElementById("appVersion");
-    if (el) el.textContent = `CRM ${v} (cloud sync)`;
   } catch (_) {}
 
 
     /*****************************************************************
-     * Working v1.1.16 CRM - Single-file, localStorage persistence.
+     * Summit CRM - Single-file, localStorage persistence.
      * Enhancements:
      * - Full Edit support (Contacts, Investors, Deals, Projects, Tasks, Appointments)
      * - Appointment end time auto-sync to start time (default +90m, and prevents end<start)
      *****************************************************************/
 
     // ---------- Utilities ----------
-    const BASE_STORAGE_KEY = "dealflowpro_state_v1.1.16";
-    const BASE_META_KEY = "dealflowpro_meta_v1.1.16";
+    const BASE_STORAGE_KEY = "summitcrm_state_v1";
+    const BASE_META_KEY = "summitcrm_meta_v1";
 
     function getStorageKey() {
       const uid = window.firebaseCRM?.getUid?.();
