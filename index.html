@@ -838,22 +838,42 @@
           <div class="grid grid-cols-2 gap-3">
             <input name="purchaseDate" type="date" class="w-full border border-gray-300 rounded-lg px-3 py-2 focus-ring">
             <select name="propType" class="w-full border border-gray-300 rounded-lg px-3 py-2 focus-ring">
-  <option value="">Property Type (optional)</option>
-  <option value="multifamily">Multifamily (5+)</option>
-  <option value="duplex">Duplex</option>
-  <option value="triplex">Triplex</option>
-  <option value="quadplex">Quadplex</option>
-  <option value="single_family">Single Family</option>
-  <option value="condo_townhome">Condo / Townhome</option>
-  <option value="mixed_use">Mixed-Use</option>
-  <option value="rv_park">RV Park</option>
-  <option value="mobile_home_park">Mobile Home Park</option>
-  <option value="self_storage">Self Storage</option>
-  <option value="industrial">Industrial</option>
-  <option value="retail">Retail</option>
-  <option value="office">Office</option>
-  <option value="land">Land</option>
-  <option value="other">Other</option>
+  <option value="">Select type…</option>
+
+  <optgroup label="Residential">
+    <option value="single_family">Single Family</option>
+    <option value="townhome">Townhome</option>
+    <option value="condo">Condo</option>
+    <option value="duplex">Duplex</option>
+    <option value="triplex">Triplex</option>
+    <option value="fourplex">Fourplex</option>
+  </optgroup>
+
+  <optgroup label="Multifamily">
+    <option value="mf_5_24">Multifamily (5–24)</option>
+    <option value="mf_25_99">Multifamily (25–99)</option>
+    <option value="mf_100_plus">Multifamily (100+)</option>
+  </optgroup>
+
+  <optgroup label="Commercial / Mixed">
+    <option value="mixed_use">Mixed-Use</option>
+    <option value="retail">Retail</option>
+    <option value="office">Office</option>
+    <option value="industrial">Industrial</option>
+    <option value="flex">Flex</option>
+    <option value="medical_office">Medical Office</option>
+  </optgroup>
+
+  <optgroup label="Specialty">
+    <option value="rv_park">RV Park</option>
+    <option value="self_storage">Self-Storage</option>
+    <option value="hospitality">Hospitality (Hotel/Motel)</option>
+    <option value="student_housing">Student Housing</option>
+    <option value="senior_housing">Senior Housing / Assisted Living</option>
+    <option value="land_vacant">Land (Vacant)</option>
+    <option value="land_ag">Land (Agricultural)</option>
+    <option value="land_entitled">Land (Entitled/Development)</option>
+  </optgroup>
 </select>
 
             <select name="propStatus" class="w-full border border-gray-300 rounded-lg px-3 py-2 focus-ring">
@@ -2156,22 +2176,42 @@ if (q && !hay.includes(q)) return false;
       const raw = (v || '').toString().trim();
       if (!raw) return '';
       const map = {
-        multifamily: 'Multifamily (5+)',
+        // New taxonomy
+        single_family: 'Single Family',
+        townhome: 'Townhome',
+        condo: 'Condo',
         duplex: 'Duplex',
         triplex: 'Triplex',
-        quadplex: 'Quadplex',
-        single_family: 'Single Family',
-        condo_townhome: 'Condo / Townhome',
+        fourplex: 'Fourplex',
+        mf_5_24: 'Multifamily (5–24)',
+        mf_25_99: 'Multifamily (25–99)',
+        mf_100_plus: 'Multifamily (100+)',
         mixed_use: 'Mixed-Use',
-        rv_park: 'RV Park',
-        mobile_home_park: 'Mobile Home Park',
-        self_storage: 'Self Storage',
-        industrial: 'Industrial',
         retail: 'Retail',
         office: 'Office',
+        industrial: 'Industrial',
+        flex: 'Flex',
+        medical_office: 'Medical Office',
+        rv_park: 'RV Park',
+        self_storage: 'Self-Storage',
+        hospitality: 'Hospitality (Hotel/Motel)',
+        student_housing: 'Student Housing',
+        senior_housing: 'Senior Housing / Assisted Living',
+        land_vacant: 'Land (Vacant)',
+        land_ag: 'Land (Agricultural)',
+        land_entitled: 'Land (Entitled/Development)',
+
+        // Backward-compatibility (older values)
+        multifamily: 'Multifamily (5+)',
+        quadplex: 'Quadplex',
+        condo_townhome: 'Condo / Townhome',
+        mobile_home_park: 'Mobile Home Park',
+        selfstorage: 'Self-Storage',
         land: 'Land',
         other: 'Other'
       };
+      return map[raw] || raw.replaceAll('_',' ');
+    };
       return map[raw] || raw.replaceAll('_',' ');
     }
 
