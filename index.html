@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Summit CRM v1.1.17</title>
+  <title>Summit CRM v1.2.1</title>
 
   <!-- Tailwind (prototype CDN) -->
   <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
@@ -78,7 +78,7 @@
         <h1 class="text-2xl font-bold text-white flex items-center">
           <i class="fas fa-chart-network mr-2"></i> Summit DealFlow Pro
         </h1>
-        <p id="appVersion" class="text-sm text-gray-400 mt-1">Summit CRM v1.1.17</p>
+        <p id="appVersion" class="text-sm text-gray-400 mt-1">Summit CRM v1.2.1</p>
       </div>
 
       <nav class="flex-1 px-4">
@@ -913,7 +913,25 @@
 
         <!-- Property Quick Add -->
         <div data-form id="formProperty" class="space-y-3 hidden">
-          <input name="propName" type="text" placeholder="Property Name / Nickname" class="w-full border border-gray-300 rounded-lg px-3 py-2 focus-ring">
+          
+          <!-- Asset creation mode (Properties) -->
+          <div class="flex items-center justify-between gap-3">
+            <span class="text-sm font-medium text-gray-700">Create:</span>
+            <div class="inline-flex rounded-lg border border-gray-200 overflow-hidden">
+              <button type="button" id="propModeNewBtn" class="px-3 py-2 text-sm font-medium bg-indigo-600 text-white">New Property</button>
+              <button type="button" id="propModeFromDealBtn" class="px-3 py-2 text-sm font-medium bg-white text-gray-700 hover:bg-gray-50">From Deal</button>
+            </div>
+          </div>
+          <input type="hidden" name="propAddMode" value="new">
+
+          <div id="propFromDealWrap" class="hidden space-y-2">
+            <label class="block text-sm text-gray-700">Select Deal to move into Asset Mgmt</label>
+            <select name="propSourceDealId" id="propSourceDealId" class="w-full border border-gray-300 rounded-lg px-3 py-2 focus-ring">
+              <option value="">Choose a deal…</option>
+            </select>
+            <p class="text-xs text-gray-500">Choosing a deal will create (or link) a Property record and move the deal into <b>Asset Mgmt</b>.</p>
+          </div>
+<input name="propName" type="text" placeholder="Property Name / Nickname" class="w-full border border-gray-300 rounded-lg px-3 py-2 focus-ring">
           <input name="address" type="text" placeholder="Address / Location" class="w-full border border-gray-300 rounded-lg px-3 py-2 focus-ring">
           <div class="grid grid-cols-3 gap-3">
             <input name="city" type="text" placeholder="City" class="w-full border border-gray-300 rounded-lg px-3 py-2 focus-ring">
@@ -2607,7 +2625,94 @@
     const formError = document.getElementById('formError');
 
 
-    // ---------- Auth UI + Cloud Sync ----------
+    
+    // ---------- Properties: "New Property" vs "From Deal" segmented control ----------
+    (function initPropertyAddMode(){
+      const btnNew = document.getElementById('propModeNewBtn');
+      const btnFrom = document.getElementById('propModeFromDealBtn');
+      const wrapFrom = document.getElementById('propFromDealWrap');
+      const selDeal = document.getElementById('propSourceDealId');
+      const modeInput = document.querySelector('#formProperty input[name="propAddMode"]');
+
+      function setMode(mode){
+        if (modeInput) modeInput.value = mode;
+        if (btnNew && btnFrom){
+          const isNew = (mode === 'new');
+          btnNew.classList.toggle('bg-indigo-600', isNew);
+          btnNew.classList.toggle('text-white', isNew);
+          btnNew.classList.toggle('bg-white', !isNew);
+          btnNew.classList.toggle('text-gray-700', !isNew);
+          btnNew.classList.toggle('hover:bg-gray-50', !isNew);
+
+          btnFrom.classList.toggle('bg-indigo-600', !isNew);
+          btnFrom.classList.toggle('text-white', !isNew);
+          btnFrom.classList.toggle('bg-white', isNew);
+          btnFrom.classList.toggle('text-gray-700', isNew);
+          btnFrom.classList.toggle('hover:bg-gray-50', isNew);
+        }
+        if (wrapFrom) wrapFrom.classList.toggle('hidden', mode !== 'fromDeal');
+      }
+
+      function refreshDealOptions(){
+        if (!selDeal) return;
+        const deals = (state.deals || []);
+        const opts = ['<option value="">Choose a deal…</option>'];
+        deals
+          .filter(d => d && (String(d.stage || '').toLowerCase() !== 'asset mgmt'))
+          .forEach(d => {
+            const stage = d.stage ? ` (${d.stage})` : '';
+            opts.push(`<option value="${escapeHtml(d.id)}">${escapeHtml(d.name || 'Untitled Deal')}${escapeHtml(stage)}</option>`);
+          });
+        selDeal.innerHTML = opts.join('');
+      }
+
+      function applyDealToForm(dealId){
+        if (!dealId) return;
+        const d = (state.deals || []).find(x => x.id === dealId);
+        if (!d) return;
+        // Best-effort prefill; user can still edit.
+        const form = formMap?.property;
+        if (!form) return;
+        try {
+          setFormValues(form, {
+            propName: d.name || '',
+            address: d.address || '',
+            city: d.city || '',
+            propState: d.state_code || d.state || '',
+            zip: d.zip || '',
+            county: d.county || '',
+            parcel: d.parcel_apn || d.apn || d.parcel || '',
+            // keep propType as-is; many deals won't have it
+          });
+        } catch (_) {}
+      }
+
+      if (btnNew) btnNew.addEventListener('click', () => { setMode('new'); });
+      if (btnFrom) btnFrom.addEventListener('click', () => { refreshDealOptions(); setMode('fromDeal'); });
+
+      if (selDeal) selDeal.addEventListener('change', (e) => {
+        applyDealToForm(e.target.value);
+      });
+
+      // When modal opens for property, default to New Property and refresh deal list lazily.
+      document.addEventListener('modal:open', (e) => {
+        if (e?.detail?.type === 'property'){
+          setMode('new');
+          refreshDealOptions();
+        }
+      });
+
+      // Fallback: also refresh on nav to properties
+      document.addEventListener('nav:change', (e) => {
+        if (e?.detail?.view === 'properties') refreshDealOptions();
+      });
+
+      // Initialize once
+      setMode('new');
+    })();
+
+
+// ---------- Auth UI + Cloud Sync ----------
     const authBtn = document.getElementById('authBtn');
     const authStatus = document.getElementById('authStatus');
 
@@ -4077,8 +4182,21 @@
           };
 
           if (!isEdit) {
-            createProperty(patch);
-            showNotification('Property added.', 'success');
+            const mode = (data.propAddMode || 'new');
+            if (mode === 'fromDeal') {
+              const dealId = (data.propSourceDealId || '').trim();
+              if (!dealId) return setFormError('Select a Deal to convert into Asset Mgmt.');
+              // Create/link Property record from the selected Deal and move Deal to Asset Mgmt.
+              const prop = moveDealToAssetMgmt(dealId);
+              if (!prop) return setFormError('Deal not found.');
+              // If user did not choose a status, default to active for Asset Mgmt
+              if (!data.propStatus) patch.status = 'active';
+              updateProperty(prop.id, patch);
+              showNotification('Property created from Deal and linked to Asset Mgmt.', 'success');
+            } else {
+              createProperty(patch);
+              showNotification('Property added.', 'success');
+            }
           } else {
             updateProperty(editing.id, patch);
             showNotification('Property updated.', 'success');
@@ -4180,7 +4298,7 @@
         showNotification('Tip: Click "Seed Demo Data" in Quick Add modal.', 'info');
       }
 
-      console.log('Summit DealFlow Pro v1.1.17 loaded. Data stored in localStorage key:', getStorageKey());
+      console.log('Summit DealFlow Pro v1.2.1 loaded. Data stored in localStorage key:', getStorageKey());
     }
 
         // ---------- Asset Management Bridge ----------
