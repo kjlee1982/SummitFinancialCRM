@@ -93,6 +93,7 @@
             
             <li><a href="#" class="nav-item" data-nav="llcs"><i class="fas fa-building mr-3"></i> LLCs</a></li>
             <li><a href="#" class="nav-item" data-nav="properties"><i class="fas fa-map-marked-alt mr-3"></i> Properties</a></li>
+            <li><a href="#" class="nav-item" data-nav="uploads"><i class="fas fa-upload mr-3"></i> Uploads</a></li>
 <li><a href="#" class="nav-item" data-nav="tasks"><i class="fas fa-tasks mr-3"></i> Tasks</a></li>
             <li><a href="#" class="nav-item" data-nav="calendar"><i class="fas fa-calendar-alt mr-3"></i> Calendar</a></li>
             <li><a href="#" class="nav-item" data-nav="activity"><i class="fas fa-stream mr-3"></i> Activity</a></li>
@@ -520,6 +521,94 @@
           <div id="propertyTable" class="p-4 text-sm text-gray-600">No properties yet.</div>
         </div>
       </section>
+      <section class="hidden" data-view="uploads">
+        <div class="flex items-start justify-between gap-4 mb-6">
+          <div>
+            <h2 class="text-2xl font-bold text-gray-900">Uploads</h2>
+            <p class="text-gray-600 mt-1">Attach deal/property documents (T12, rent roll, LOI, DD, etc.) or contact-related files and emails.</p>
+          </div>
+        </div>
+
+        <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+          <div class="p-4 border-b border-gray-200 flex flex-col gap-4">
+            <div class="flex flex-wrap items-center gap-3">
+              <span class="text-sm font-medium text-gray-700">Attach to:</span>
+              <div class="inline-flex rounded-lg border border-gray-200 overflow-hidden">
+                <button id="uploadScopeDealBtn" class="px-3 py-2 text-sm font-medium bg-indigo-600 text-white">Deal / Property</button>
+                <button id="uploadScopeContactBtn" class="px-3 py-2 text-sm font-medium bg-white text-gray-700 hover:bg-gray-50">Contact</button>
+              </div>
+
+              <div id="uploadTargetDealWrap" class="min-w-[260px] flex-1">
+                <select id="uploadDealTarget" class="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-gray-900">
+                  <option value="">Select deal or property…</option>
+                </select>
+                <p class="text-xs text-gray-500 mt-1">Deals include underwriting/in-progress. Properties include Asset Mgmt records.</p>
+              </div>
+
+              <div id="uploadTargetContactWrap" class="min-w-[260px] flex-1 hidden">
+                <select id="uploadContactTarget" class="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-gray-900">
+                  <option value="">Select contact…</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
+              <div>
+                <label class="block text-sm text-gray-700 mb-1">Document type</label>
+                <select id="uploadDocType" class="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-gray-900">
+                  <option value="">Select type…</option>
+                  <option>T12</option>
+                  <option>Rent Roll</option>
+                  <option>LOI</option>
+                  <option>Counter Offer</option>
+                  <option>Acceptance</option>
+                  <option>Rejection</option>
+                  <option>Due Diligence</option>
+                  <option>Asset Manager Statement</option>
+                  <option>Email (GP/LP)</option>
+                  <option>Email (Prospective LP)</option>
+                  <option>Other</option>
+                </select>
+              </div>
+
+              <div class="md:col-span-2">
+                <label class="block text-sm text-gray-700 mb-1">Title</label>
+                <input id="uploadTitle" class="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-gray-900" placeholder="e.g., 2025-12 Rent Roll / LOI draft / DD findings" />
+              </div>
+
+              <div>
+                <label class="block text-sm text-gray-700 mb-1">File</label>
+                <input id="uploadFile" type="file" class="w-full text-sm" />
+                <p class="text-xs text-gray-500 mt-1">Tip: Keep files small. Large PDFs may exceed browser storage.</p>
+              </div>
+
+              <div class="md:col-span-4">
+                <label class="block text-sm text-gray-700 mb-1">Notes</label>
+                <textarea id="uploadNotes" rows="2" class="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-gray-900" placeholder="Optional context, key points, next steps, etc."></textarea>
+              </div>
+            </div>
+
+            <div class="flex flex-wrap items-center justify-between gap-3">
+              <div class="text-xs text-gray-500">Uploads are stored inside the CRM data (local/cloud). For very large files, prefer linking to Drive/Dropbox and attach the link in Notes.</div>
+              <button id="uploadAddBtn" class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-medium focus-ring">
+                <i class="fas fa-cloud-upload-alt mr-2"></i>Add Upload
+              </button>
+            </div>
+          </div>
+
+          <div class="p-4">
+            <div class="flex items-center justify-between gap-3 mb-3">
+              <h3 class="text-sm font-semibold text-gray-900">Attached files</h3>
+              <button id="uploadRefreshBtn" class="px-3 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 text-sm font-medium focus-ring">
+                <i class="fas fa-sync mr-2"></i>Refresh
+              </button>
+            </div>
+            <div id="uploadsTable" class="overflow-x-auto"></div>
+          </div>
+        </div>
+      </section>
+
+
 		<section data-view="tasks" class="hidden">
           <div class="flex items-start justify-between gap-4 mb-6">
             <div>
@@ -1172,7 +1261,8 @@
       appointments: [],
       activities: [],
       llcs: [],
-      properties: []
+      properties: [],
+      uploads: []
     };
 
     function loadMeta() {
@@ -1417,6 +1507,7 @@
         case 'projects': renderProjects(); break;
         case 'llcs': renderLLCs(); break;
         case 'properties': renderProperties(); break;
+        case 'uploads': renderUploads(); break;
         case 'tasks': renderTasks(); break;
         case 'calendar': renderAppointments(); break;
         case 'activity': renderActivity(); break;
@@ -1830,7 +1921,299 @@
                   <td class="px-4 py-2">${es((l.status||'').replaceAll('_',' '))}</td>
                   <td class="px-4 py-2">${es(fmtDate(l.formation_date))}</td>
                   <td class="px-4 py-2">${es(l.ein || '')}</td>
-                  <td class="px-4 py-2 text-right">
+                  <td class="px-4 py-2 text-right"
+    // ---------- Uploads ----------
+    const uploadScopeDealBtn = document.getElementById('uploadScopeDealBtn');
+    const uploadScopeContactBtn = document.getElementById('uploadScopeContactBtn');
+    const uploadTargetDealWrap = document.getElementById('uploadTargetDealWrap');
+    const uploadTargetContactWrap = document.getElementById('uploadTargetContactWrap');
+    const uploadDealTarget = document.getElementById('uploadDealTarget');
+    const uploadContactTarget = document.getElementById('uploadContactTarget');
+    const uploadDocType = document.getElementById('uploadDocType');
+    const uploadTitle = document.getElementById('uploadTitle');
+    const uploadNotes = document.getElementById('uploadNotes');
+    const uploadFile = document.getElementById('uploadFile');
+    const uploadAddBtn = document.getElementById('uploadAddBtn');
+    const uploadRefreshBtn = document.getElementById('uploadRefreshBtn');
+
+    let uploadScope = 'deal'; // 'deal' or 'contact'
+
+    function setUploadScope(scope) {
+      uploadScope = scope === 'contact' ? 'contact' : 'deal';
+      if (uploadScopeDealBtn && uploadScopeContactBtn) {
+        uploadScopeDealBtn.classList.toggle('bg-indigo-600', uploadScope === 'deal');
+        uploadScopeDealBtn.classList.toggle('text-white', uploadScope === 'deal');
+        uploadScopeDealBtn.classList.toggle('bg-white', uploadScope !== 'deal');
+        uploadScopeDealBtn.classList.toggle('text-gray-700', uploadScope !== 'deal');
+        uploadScopeDealBtn.classList.toggle('hover:bg-gray-50', uploadScope !== 'deal');
+
+        uploadScopeContactBtn.classList.toggle('bg-indigo-600', uploadScope === 'contact');
+        uploadScopeContactBtn.classList.toggle('text-white', uploadScope === 'contact');
+        uploadScopeContactBtn.classList.toggle('bg-white', uploadScope !== 'contact');
+        uploadScopeContactBtn.classList.toggle('text-gray-700', uploadScope !== 'contact');
+        uploadScopeContactBtn.classList.toggle('hover:bg-gray-50', uploadScope !== 'contact');
+      }
+      if (uploadTargetDealWrap) uploadTargetDealWrap.classList.toggle('hidden', uploadScope !== 'deal');
+      if (uploadTargetContactWrap) uploadTargetContactWrap.classList.toggle('hidden', uploadScope !== 'contact');
+    }
+
+    function buildDealPropertyOptions() {
+      const deals = (state.deals || []).slice().sort((a,b)=> (a.name||'').localeCompare(b.name||''));
+      const props = (state.properties || []).slice().sort((a,b)=> (a.name||'').localeCompare(b.name||''));
+
+      const dealOpts = deals.map(d => ({
+        value: `deal:${d.id}`,
+        label: `${d.name || 'Deal'}${d.stage ? ` · ${d.stage.replaceAll('_',' ')}` : ''}`
+      }));
+
+      const propOpts = props.map(p => ({
+        value: `property:${p.id}`,
+        label: `${p.name || 'Property'}${p.type ? ` · ${p.type}` : ''}${p.status ? ` · ${p.status}` : ''}`
+      }));
+
+      return { dealOpts, propOpts };
+    }
+
+    function populateUploadTargets() {
+      // Deal/Property select
+      if (uploadDealTarget) {
+        const { dealOpts, propOpts } = buildDealPropertyOptions();
+        uploadDealTarget.innerHTML = '';
+        const base = document.createElement('option');
+        base.value = '';
+        base.textContent = 'Select deal or property…';
+        uploadDealTarget.appendChild(base);
+
+        if (dealOpts.length) {
+          const og = document.createElement('optgroup');
+          og.label = 'Deals (in progress)';
+          dealOpts.forEach(o => {
+            const opt = document.createElement('option');
+            opt.value = o.value;
+            opt.textContent = o.label;
+            og.appendChild(opt);
+          });
+          uploadDealTarget.appendChild(og);
+        }
+
+        if (propOpts.length) {
+          const og2 = document.createElement('optgroup');
+          og2.label = 'Properties (Asset Mgmt)';
+          propOpts.forEach(o => {
+            const opt = document.createElement('option');
+            opt.value = o.value;
+            opt.textContent = o.label;
+            og2.appendChild(opt);
+          });
+          uploadDealTarget.appendChild(og2);
+        }
+      }
+
+      // Contact select
+      if (uploadContactTarget) {
+        const contacts = (state.contacts || []).slice().sort((a,b)=> (a.name||'').localeCompare(b.name||''));
+        uploadContactTarget.innerHTML = '';
+        const base = document.createElement('option');
+        base.value = '';
+        base.textContent = 'Select contact…';
+        uploadContactTarget.appendChild(base);
+        contacts.forEach(c => {
+          const opt = document.createElement('option');
+          opt.value = c.id;
+          opt.textContent = `${c.name || 'Contact'}${c.email ? ` · ${c.email}` : ''}`;
+          uploadContactTarget.appendChild(opt);
+        });
+      }
+    }
+
+    function formatBytes(bytes) {
+      const n = Number(bytes || 0);
+      if (!n) return '—';
+      const units = ['B','KB','MB','GB'];
+      let u=0; let v=n;
+      while (v >= 1024 && u < units.length-1) { v/=1024; u++; }
+      return `${v.toFixed(u===0?0:1)} ${units[u]}`;
+    }
+
+    function getUploadAttachedLabel(u) {
+      if (!u) return '—';
+      if (u.scope === 'contact') {
+        const c = (state.contacts || []).find(x => x.id === u.contact_id);
+        return c ? `Contact: ${c.name || c.email || c.id}` : 'Contact (missing)';
+      }
+      if (u.property_id) {
+        const p = (state.properties || []).find(x => x.id === u.property_id);
+        return p ? `Property: ${p.name || p.id}` : 'Property (missing)';
+      }
+      if (u.deal_id) {
+        const d = (state.deals || []).find(x => x.id === u.deal_id);
+        return d ? `Deal: ${d.name || d.id}` : 'Deal (missing)';
+      }
+      return '—';
+    }
+
+    function downloadUpload(id) {
+      const u = (state.uploads || []).find(x => x.id === id);
+      if (!u || !u.dataUrl) return;
+      try {
+        const a = document.createElement('a');
+        a.href = u.dataUrl;
+        a.download = u.filename || `upload-${id}`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+      } catch (_) {}
+    }
+
+    function removeUpload(id) {
+      state.uploads = (state.uploads || []).filter(x => x.id !== id);
+      addActivity('Upload removed.', { upload_id: id });
+      saveState();
+      renderUploads();
+      showNotification('Upload removed.', 'success');
+    }
+
+    function renderUploads() {
+      const host = document.getElementById('uploadsTable');
+      if (!host) return;
+
+      state.uploads = state.uploads || [];
+      populateUploadTargets();
+
+      const rows = (state.uploads || []).slice().sort((a,b)=> (b.created_at || '').localeCompare(a.created_at || ''));
+      if (!rows.length) {
+        host.innerHTML = `<div class="p-4 text-sm text-gray-600">No uploads yet.</div>`;
+        return;
+      }
+
+      host.innerHTML = `
+        <table class="w-full text-sm">
+          <thead>
+            <tr class="text-left text-gray-500 border-b border-gray-200">
+              <th class="py-2 pr-4">Date</th>
+              <th class="py-2 pr-4">Type</th>
+              <th class="py-2 pr-4">Title</th>
+              <th class="py-2 pr-4">Attached to</th>
+              <th class="py-2 pr-4">File</th>
+              <th class="py-2 pr-0 text-right">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows.map(u => `
+              <tr class="border-b border-gray-100 hover:bg-gray-50">
+                <td class="py-2 pr-4 text-gray-600">${escapeHtml((u.created_at || '').slice(0,10) || '—')}</td>
+                <td class="py-2 pr-4">${escapeHtml(u.doc_type || '—')}</td>
+                <td class="py-2 pr-4">
+                  <div class="font-medium text-gray-900">${escapeHtml(u.title || u.filename || '—')}</div>
+                  ${u.notes ? `<div class="text-xs text-gray-500 line-clamp-2">${escapeHtml(u.notes)}</div>` : ``}
+                </td>
+                <td class="py-2 pr-4 text-gray-700">${escapeHtml(getUploadAttachedLabel(u))}</td>
+                <td class="py-2 pr-4">
+                  <div class="text-gray-900">${escapeHtml(u.filename || '—')}</div>
+                  <div class="text-xs text-gray-500">${escapeHtml(formatBytes(u.size))}${u.mime ? ` · ${escapeHtml(u.mime)}` : ''}</div>
+                </td>
+                <td class="py-2 pr-0">
+                  <div class="flex items-center justify-end gap-2">
+                    ${u.dataUrl ? `<button class="px-2 py-1 bg-white border border-gray-300 rounded hover:bg-gray-50" data-action="download-upload" data-id="${u.id}"><i class="fas fa-download"></i></button>` : ``}
+                    <button class="px-2 py-1 bg-white border border-gray-300 rounded hover:bg-gray-50" data-action="remove-upload" data-id="${u.id}"><i class="fas fa-trash"></i></button>
+                  </div>
+                </td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      `;
+
+      host.querySelectorAll('[data-action="download-upload"]').forEach(btn => {
+        btn.addEventListener('click', () => downloadUpload(btn.dataset.id));
+      });
+      host.querySelectorAll('[data-action="remove-upload"]').forEach(btn => {
+        btn.addEventListener('click', () => removeUpload(btn.dataset.id));
+      });
+    }
+
+    if (uploadScopeDealBtn) uploadScopeDealBtn.addEventListener('click', () => { setUploadScope('deal'); });
+    if (uploadScopeContactBtn) uploadScopeContactBtn.addEventListener('click', () => { setUploadScope('contact'); });
+
+    if (uploadRefreshBtn) uploadRefreshBtn.addEventListener('click', () => {
+      try { renderUploads(); } catch (_) {}
+      showNotification('Uploads refreshed.', 'success');
+    });
+
+    if (uploadAddBtn) {
+      uploadAddBtn.addEventListener('click', async () => {
+        try {
+          state.uploads = state.uploads || [];
+          const docType = (uploadDocType?.value || '').trim();
+          const title = (uploadTitle?.value || '').trim();
+          const notes = (uploadNotes?.value || '').trim();
+          const f = uploadFile?.files?.[0];
+
+          if (uploadScope === 'deal') {
+            const target = (uploadDealTarget?.value || '').trim();
+            if (!target) return showNotification('Select a deal or property to attach the upload.', 'error');
+          } else {
+            const cid = (uploadContactTarget?.value || '').trim();
+            if (!cid) return showNotification('Select a contact to attach the upload.', 'error');
+          }
+
+          if (!f) return showNotification('Choose a file to upload.', 'error');
+
+          // Soft size cap to avoid breaking storage.
+          const maxBytes = 5 * 1024 * 1024;
+          if (f.size > maxBytes) {
+            return showNotification('File too large for in-app storage. Add a Drive/Dropbox link in Notes instead.', 'error');
+          }
+
+          const dataUrl = await new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onerror = () => reject(new Error('File read failed'));
+            reader.onload = () => resolve(String(reader.result || ''));
+            reader.readAsDataURL(f);
+          });
+
+          const u = {
+            id: uid('up'),
+            created_at: new Date().toISOString(),
+            scope: uploadScope,
+            doc_type: docType,
+            title,
+            notes,
+            filename: f.name,
+            mime: f.type || '',
+            size: f.size || 0,
+            dataUrl
+          };
+
+          if (uploadScope === 'deal') {
+            const target = (uploadDealTarget?.value || '').trim();
+            const [kind, id] = target.split(':');
+            if (kind === 'property') u.property_id = id;
+            else u.deal_id = id;
+          } else {
+            u.contact_id = (uploadContactTarget?.value || '').trim();
+          }
+
+          state.uploads.push(u);
+          addActivity('Upload added.', { upload_id: u.id, scope: u.scope, deal_id: u.deal_id, property_id: u.property_id, contact_id: u.contact_id });
+          saveState();
+          renderUploads();
+
+          // reset inputs
+          if (uploadTitle) uploadTitle.value = '';
+          if (uploadNotes) uploadNotes.value = '';
+          if (uploadFile) uploadFile.value = '';
+          if (uploadDocType) uploadDocType.value = '';
+
+          showNotification('Upload added.', 'success');
+        } catch (e) {
+          showNotification(e?.message || 'Upload failed.', 'error');
+        }
+      });
+    }
+
+
+>
                     <button class="px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded" data-action="llc-edit" data-id="${l.id}">Edit</button>
                     <button class="px-2 py-1 text-xs bg-red-50 hover:bg-red-100 text-red-700 rounded" data-action="llc-del" data-id="${l.id}">Delete</button>
                   </td>
@@ -1933,6 +2316,8 @@ const rows = state.properties || [];
         </div>
       `;
     }
+    try { setUploadScope('deal'); } catch (_) {}
+
 function renderTasks() {
       const q = (document.getElementById('tasksSearch').value || "").toLowerCase().trim();
       const filter = document.getElementById('tasksFilter').value || "all";
