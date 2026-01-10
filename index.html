@@ -485,8 +485,10 @@
             </div>
           </div>
         </section>
-      
-	  <!-- LLCs View -->
+
+        <!-- TASKS VIEW -->
+        <section 
+      <!-- LLCs View -->
       <section class="hidden" data-view="llcs">
         <div class="flex items-center justify-between mb-4">
           <div>
@@ -867,9 +869,6 @@
           </div>
           <select name="linkId" class="w-full border border-gray-300 rounded-lg px-3 py-2 focus-ring hidden"></select>
         </div>
-		
-		<div id="tasksMeta" class="text-xs text-gray-500 px-6 pb-2"></div>
-
 
         <!-- APPOINTMENT FIELDS -->
         <div id="formAppointment" class="space-y-3 hidden">
@@ -1041,6 +1040,7 @@
     setDoc,
     serverTimestamp
   } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-firestore.js";
+  import { initializeAppCheck, ReCaptchaV3Provider } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-app-check.js";
 
   // Summit Financial CRM Firebase config
   const firebaseConfig = {
@@ -1054,6 +1054,17 @@
   };
 
   const app = initializeApp(firebaseConfig);
+
+  // Firebase App Check (reCAPTCHA v3)
+  try {
+    initializeAppCheck(app, {
+      provider: new ReCaptchaV3Provider("6LfL00UsAAAAAPo9TQSTzHkvlUzc3ahxoouLmqRX"),
+      isTokenAutoRefreshEnabled: true,
+    });
+    console.log('[AppCheck] initialized');
+  } catch (e) {
+    console.warn('[AppCheck] init failed', e);
+  }
   const auth = getAuth(app);
   const db = getFirestore(app, "summitcrm");
 
@@ -2350,7 +2361,7 @@
 		const filtered = state.tasks.filter(t => {
         const hay = `${t.title} ${t.description||""} ${linkLabel(t.link)}`.toLowerCase();
         
-      const openCount = (state.tasks || []).filter(t => t && !t.completed).length;
+      const openCount = (state.tasks || []).filter(t => t && !t.done).length;
       const noDueCount = (state.tasks || []).filter(t => t && !t.due_at).length;
 
       const metaEl = document.getElementById('tasksMeta');
@@ -2574,56 +2585,6 @@
         .replaceAll('"', '&quot;')
         .replaceAll("'", '&#039;');
     }
-	
-	function es(v) { return escapeHtml(v); }
-
-	function findPropertyById(id) {
-	  return (state.properties || []).find(p => p.id === id) || null;
-	}
-
-	// Minimal “Deal -> Property” move that:
-	// 1) creates a Property if none exists
-	// 2) links it to the deal
-	// 3) sets deal.stage = 'asset_mgmt'
-	function moveDealToAssetMgmt(dealOrId) {
-	  const d = typeof dealOrId === 'string'
-		? (state.deals || []).find(x => x.id === dealOrId)
-		: dealOrId;
-
-	  if (!d) return null;
-
-	  // Find existing property linked to this deal
-	  let p = (state.properties || []).find(x => x.source_deal_id === d.id) || null;
-
-	  if (!p) {
-		p = {
-		  id: uid('prop'),
-		  name: d.name || 'Property',
-		  address: d.address || '',
-		  city: d.city || '',
-		  state_code: d.state_code || d.state || '',
-		  zip: d.zip || '',
-		  county: d.county || '',
-		  parcel: d.parcel_apn || d.apn || d.parcel || '',
-		  property_type: d.property_type || '',
-		  status: 'owned',
-		  purchase_date: d.close_target_date || null,
-		  owning_llc_id: '',
-		  notes: `Created from deal: ${d.name || d.id}`,
-		  source_deal_id: d.id,
-		  created_at: nowIso(),
-		  updated_at: nowIso()
-		};
-		state.properties.unshift(p);
-		addActivity(`Property created from deal: ${d.name}`, { deal_id: d.id, property_id: p.id });
-	  }
-
-	  d.stage = 'asset_mgmt';
-	  d.asset_property_id = p.id;
-	  addActivity(`Deal moved to Asset Mgmt: ${d.name}`, { deal_id: d.id, property_id: p.id });
-	  return p;
-	}
-
 
     // ---------- Property type formatter ----------
     const formatPropType = (v) => {
@@ -2709,7 +2670,7 @@
         const deals = (state.deals || []);
         const opts = ['<option value="">Choose a deal…</option>'];
         deals
-          .filter(d => d && String(d.stage || '') !== 'asset_mgmt')
+          .filter(d => d && (String(d.stage || '').toLowerCase() !== 'asset mgmt'))
           .forEach(d => {
             const stage = d.stage ? ` (${d.stage})` : '';
             opts.push(`<option value="${escapeHtml(d.id)}">${escapeHtml(d.name || 'Untitled Deal')}${escapeHtml(stage)}</option>`);
@@ -2773,11 +2734,11 @@
     const sidebarAvatar   = document.getElementById('sidebarAvatar');
 
     // Primary admin (case-insensitive match)
-    const ADMIN_EMAIL = 'kelanlee@summitfinancialanalytics.com';
-
-    function applySidebarIdentity(user) {
+    const ADMIN_EMAILS = ['kelanlee@summitfinancialanalytics.com','kjlee1982@gmail.com'].map(e => e.toLowerCase());
+    const ALLOWED_DOMAIN = '@summitfinancialanalytics.com';
+function applySidebarIdentity(user) {
       const email = (user?.email || '').toLowerCase();
-      const isAdmin = !!email && email === ADMIN_EMAIL.toLowerCase();
+      const isAdmin = !!email && ADMIN_EMAILS.includes(email);
 
       const displayName = user ? (isAdmin ? 'Admin User' : 'Reviewer') : 'Admin User';
       const modeLabel   = user ? 'Cloud save' : 'Local mode';
@@ -3931,13 +3892,24 @@
     if (closeAuthModalBtn) closeAuthModalBtn.addEventListener('click', closeAuthModal);
     window.addEventListener('click', (event) => { if (event.target === authModal) closeAuthModal(); });
 
+    // ---------- Invite-only guard (client-side) ----------
+    function isAllowedEmailForAuth(email) {
+      const e = String(email || '').trim().toLowerCase();
+      if (!e) return false;
+      if (typeof ADMIN_EMAILS !== 'undefined' && Array.isArray(ADMIN_EMAILS) && ADMIN_EMAILS.includes(e)) return true;
+      if (typeof ALLOWED_DOMAIN === 'string' && ALLOWED_DOMAIN && e.endsWith(ALLOWED_DOMAIN)) return true;
+      return false;
+    }
+
     if (authSignIn) {
       authSignIn.addEventListener('click', async () => {
         try {
           const email = (authEmail.value || '').trim();
           const pw = authPassword.value || '';
           if (!email || !pw) return setAuthError('Email and password are required.');
-          setAuthError('');
+                              if (!isAllowedEmailForAuth(email)) return setAuthError('Invite required. Use a @summitfinancialanalytics.com email, or ask an admin to create/invite your account.');
+if (!isAllowedEmailForAuth(email)) return setAuthError('Invite required. Use a @summitfinancialanalytics.com email, or ask an admin to create/invite your account.');
+setAuthError('');
           await window.firebaseCRM.signIn(email, pw);
           // Force UI update immediately (auth listener may be delayed in some hosts)
           try { updateAuthUI({ email, uid: window.firebaseCRM.getUid?.() }); } catch (_) {}
