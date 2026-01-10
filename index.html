@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Summit CRM v1.2.2</title>
+  <title>Summit CRM v1.2.3</title>
 
   <!-- Tailwind (prototype CDN) -->
   <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
@@ -78,7 +78,7 @@
         <h1 class="text-2xl font-bold text-white flex items-center">
           <i class="fas fa-chart-network mr-2"></i> Summit DealFlow Pro
         </h1>
-        <p id="appVersion" class="text-sm text-gray-400 mt-1">Summit CRM v1.2.2</p>
+        <p id="appVersion" class="text-sm text-gray-400 mt-1">Summit CRM v1.2.3</p>
       </div>
 
       <nav class="flex-1 px-4">
@@ -790,13 +790,16 @@
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-1">Type</label>
           <select id="addType" class="w-full border border-gray-300 rounded-lg px-3 py-2 focus-ring">
-            <option value="contact">Contact</option>
-            <option value="investor">Investor</option>
-            <option value="deal">Deal</option>
-            <option value="project">Project</option>
-            <option value="task">Task</option>
-            <option value="appointment">Appointment</option>
-          </select>
+			  <option value="contact">Contact</option>
+			  <option value="investor">Investor</option>
+			  <option value="deal">Deal</option>
+			  <option value="project">Project</option>
+			  <option value="task">Task</option>
+			  <option value="appointment">Appointment</option>
+			  <option value="llc">LLC</option>
+			  <option value="property">Property</option>
+		  </select>
+
         </div>
 
         <!-- CONTACT FIELDS -->
@@ -1021,6 +1024,8 @@
   <!-- Firebase Auth + Firestore Sync (module) -->
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-app.js";
+  import { initializeAppCheck, ReCaptchaV3Provider } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-app-check.js";
+  
   import {
     getAuth,
     onAuthStateChanged,
@@ -1040,8 +1045,7 @@
     setDoc,
     serverTimestamp
   } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-firestore.js";
-  import { initializeAppCheck, ReCaptchaV3Provider } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-app-check.js";
-
+  
   // Summit Financial CRM Firebase config
   const firebaseConfig = {
     apiKey: "AIzaSyBvIWKdRexJGVIp1wh22ncdJow2S0lgS7s",
@@ -3036,6 +3040,13 @@ function applySidebarIdentity(user) {
       Object.values(formMap).forEach(el => el.classList.add('hidden'));
       formMap[type].classList.remove('hidden');
       addType.value = type;
+	    // Hide the Type selector when the modal was opened from a specific context
+		  try {
+			const typeRow = addType ? addType.closest('div') : null; // the <div> that wraps label+select
+			const forced = ['property','llc'];
+			if (typeRow) typeRow.classList.toggle('hidden', forced.includes(type));
+		  } catch (_) {}
+
       formError.classList.add('hidden');
       formError.textContent = "";
       document.getElementById('quickAddTitle').textContent = `${modalMode === 'edit' ? 'Edit' : 'Quick Add'}: ${type.charAt(0).toUpperCase() + type.slice(1)}`;
@@ -3395,7 +3406,13 @@ function applySidebarIdentity(user) {
       d.amount = (d.amount === '' || d.amount === null) ? null : Number(d.amount);
       addActivity(`Deal updated: ${d.name}`, { deal_id: d.id });
       if (prevStage !== 'due_diligence' && d.stage === 'due_diligence') generateDDChecklist(d);
-      return true;
+	  
+	  // If a deal is manually moved into Asset Mgmt, auto-create/link the Property
+		if (prevStage !== 'asset_mgmt' && d.stage === 'asset_mgmt') { 
+		  try { moveDealToAssetMgmt(d); } catch (_) {}
+		}
+		return true;
+
     }
 
     function updateProject(id, patch) {
@@ -4321,7 +4338,7 @@ setAuthError('');
         showNotification('Tip: Click "Seed Demo Data" in Quick Add modal.', 'info');
       }
 
-      console.log('Summit DealFlow Pro v1.2.2 loaded. Data stored in localStorage key:', getStorageKey());
+      console.log('Summit DealFlow Pro v1.2.3 loaded. Data stored in localStorage key:', getStorageKey());
     }
 
         // ---------- Asset Management Bridge ----------
