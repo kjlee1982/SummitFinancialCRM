@@ -2661,7 +2661,7 @@
         const deals = (state.deals || []);
         const opts = ['<option value="">Choose a deal…</option>'];
         deals
-          .filter(d => d && (String(d.stage || '').!== 'asset_mgmt'))
+          .filter(d => d && (String(d.stage || '') !== 'asset_mgmt'))
           .forEach(d => {
             const stage = d.stage ? ` (${d.stage})` : '';
             opts.push(`<option value="${escapeHtml(d.id)}">${escapeHtml(d.name || 'Untitled Deal')}${escapeHtml(stage)}</option>`);
