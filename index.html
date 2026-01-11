@@ -936,7 +936,7 @@
             </select>
             <p class="text-xs text-gray-500">Choosing a deal will create (or link) a Property record and move the deal into <b>Asset Mgmt</b>.</p>
           </div>
-<input name="propName" type="text" placeholder="Property Name / Nickname" class="w-full border border-gray-300 rounded-lg px-3 py-2 focus-ring">
+		  <input name="propName" type="text" placeholder="Property Name / Nickname" class="w-full border border-gray-300 rounded-lg px-3 py-2 focus-ring">
           <input name="address" type="text" placeholder="Address / Location" class="w-full border border-gray-300 rounded-lg px-3 py-2 focus-ring">
           <div class="grid grid-cols-3 gap-3">
             <input name="city" type="text" placeholder="City" class="w-full border border-gray-300 rounded-lg px-3 py-2 focus-ring">
@@ -3047,20 +3047,20 @@
       }, 0);
     }
 
-    function openModal(type='contact') {
+    function openModal(type) {
       // Default modal type based on current view if none provided
       try {
-        if (!type) {
-          if (currentView === 'properties') type = 'property';
-          else if (currentView === 'llcs') type = 'llc';
-          else type = (addType && addType.value) ? addType.value : 'contact';
-        }
-      } catch (_) { type = type || 'contact'; }
+		if (!type) {
+		  if (currentView === 'properties') type = 'property';
+		  else if (currentView === 'llcs') type = 'llc';
+		  else type = (addType && addType.value) ? addType.value : 'contact';
+		}
+	  } catch (_) { type = type || 'contact'; }
 
-      modal.classList.remove('hidden');
-      setModalMode('create', type, null);
-      showForm(type);
-    }
+	  modal.classList.remove('hidden');
+	  setModalMode('create', type, null);
+	  showForm(type);
+	}
 
     function closeModal() {
       modal.classList.add('hidden');
