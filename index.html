@@ -107,6 +107,8 @@
             <button class="quick-add-btn" data-open-quickadd="deal"><i class="fas fa-handshake mr-2"></i> Deal</button>
             <button class="quick-add-btn" data-open-quickadd="task"><i class="fas fa-tasks mr-2"></i> Task</button>
             <button class="quick-add-btn" data-open-quickadd="appointment"><i class="fas fa-calendar-plus mr-2"></i> Appointment</button>
+            <button class="quick-add-btn" data-open-quickadd="property"><i class="fas fa-building mr-2"></i> Property</button>
+            <button class="quick-add-btn" data-open-quickadd="llc"><i class="fas fa-landmark mr-2"></i> LLC</button>
             <button class="quick-add-btn" data-open-quickadd="project"><i class="fas fa-project-diagram mr-2"></i> Project</button>
           </div>
         </div>
@@ -3046,6 +3048,15 @@
     }
 
     function openModal(type='contact') {
+      // Default modal type based on current view if none provided
+      try {
+        if (!type) {
+          if (currentView === 'properties') type = 'property';
+          else if (currentView === 'llcs') type = 'llc';
+          else type = (addType && addType.value) ? addType.value : 'contact';
+        }
+      } catch (_) { type = type || 'contact'; }
+
       modal.classList.remove('hidden');
       setModalMode('create', type, null);
       showForm(type);
@@ -3485,7 +3496,8 @@
         created_at: nowIso(),
         updated_at: nowIso()
       };
-      state.properties.unshift(prop);
+      state.properties = state.properties || [];
+        state.properties.unshift(prop);
       addActivity(`Property created: ${name}`, { property_id: prop.id });
       return prop;
     }
@@ -4220,6 +4232,9 @@
         renderAll();
         clearForm(formEl);
         closeModal();
+        try { renderProperties(); } catch(_) {}
+        try { renderDashboard(); } catch(_) {}
+
 
       } catch (err) {
         setFormError('An error occurred. Please check fields and try again.');
@@ -4354,7 +4369,8 @@
     linked_deal_ids: [d.id]
     };
 
-    state.properties.push(prop);
+    state.properties = state.properties || [];
+        state.properties.push(prop);
     d.asset_property_id = pid;
 
     addActivity(`Deal "${d.name}" moved to Asset Mgmt and a Property record was created.`, { deal_id: d.id, property_id: pid });
