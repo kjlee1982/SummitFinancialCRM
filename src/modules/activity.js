@@ -64,7 +64,6 @@ export function renderActivity(activities) {
 
 /**
  * Helper to log an activity through the state manager
- * (Used by other modules)
  */
 export function createActivityEntry(text, type = 'general') {
   return {
@@ -72,4 +71,10 @@ export function createActivityEntry(text, type = 'general') {
     type,
     at: new Date().toISOString()
   };
-}
+} // This closing bracket was missing or misplaced
+
+// Export the object that main.js is looking for
+export const activity = {
+  createActivityEntry,
+  renderActivity
+};
