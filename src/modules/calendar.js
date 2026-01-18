@@ -6,6 +6,7 @@
 import { formatters } from '../utils/formatters.js';
 
 let viewDate = new Date(); // The month the user is currently looking at
+let currentState = null;   // Local reference to state for re-rendering
 
 export const calendar = {
   
@@ -15,19 +16,22 @@ export const calendar = {
   render(state) {
     const container = document.getElementById('view-calendar');
     if (!container) return;
+    
+    // Save state reference so we can re-render when the month changes
+    currentState = state;
 
     container.innerHTML = `
       <div class="p-6">
         <div class="flex items-center justify-between mb-6">
           <h2 class="text-2xl font-bold text-gray-800">${this.getMonthName(viewDate)} ${viewDate.getFullYear()}</h2>
           <div class="flex gap-2">
-            <button data-action="cal-prev" class="p-2 hover:bg-gray-200 rounded-lg border border-gray-300">
+            <button id="cal-prev" class="p-2 hover:bg-gray-200 rounded-lg border border-gray-300 transition-colors">
               <i class="fa fa-chevron-left"></i>
             </button>
-            <button data-action="cal-today" class="px-4 py-2 hover:bg-gray-200 rounded-lg border border-gray-300 text-sm font-medium">
+            <button id="cal-today" class="px-4 py-2 hover:bg-gray-200 rounded-lg border border-gray-300 text-sm font-medium transition-colors">
               Today
             </button>
-            <button data-action="cal-next" class="p-2 hover:bg-gray-200 rounded-lg border border-gray-300">
+            <button id="cal-next" class="p-2 hover:bg-gray-200 rounded-lg border border-gray-300 transition-colors">
               <i class="fa fa-chevron-right"></i>
             </button>
           </div>
@@ -66,25 +70,27 @@ export const calendar = {
 
     // Actual days
     for (let d = 1; d <= daysInMonth; d++) {
-      const dateStr = new Date(year, month, d).toDateString();
+      const dateInstance = new Date(year, month, d);
+      const dateStr = dateInstance.toDateString();
       const isToday = dateStr === today;
       
-      // Filter events for this day
-      const dayEvents = state.appointments.filter(appt => 
+      // Filter events for this day - adding safety check for appointments array
+      const appointments = state.appointments || [];
+      const dayEvents = appointments.filter(appt => 
         new Date(appt.start_at).toDateString() === dateStr
       );
 
       html += `
-        <div class="h-32 border-b border-r border-gray-100 p-2 hover:bg-gray-50 transition-colors">
+        <div class="h-32 border-b border-r border-gray-100 p-2 hover:bg-gray-50 transition-colors group">
           <div class="flex justify-between items-start">
-            <span class="text-sm font-medium ${isToday ? 'bg-blue-600 text-white w-6 h-6 flex items-center justify-center rounded-full' : 'text-gray-700'}">
+            <span class="text-sm font-medium ${isToday ? 'bg-blue-600 text-white w-7 h-7 flex items-center justify-center rounded-full' : 'text-gray-700'}">
               ${d}
             </span>
           </div>
-          <div class="mt-2 space-y-1 overflow-y-auto max-h-20">
+          <div class="mt-2 space-y-1 overflow-y-auto max-h-20 custom-scrollbar">
             ${dayEvents.map(e => `
-              <div class="px-2 py-0.5 text-[10px] bg-blue-100 text-blue-700 rounded truncate border border-blue-200" title="${e.title}">
-                ${new Date(e.start_at).toLocaleTimeString([], {hour: 'numeric', minute:'2-digit'})} ${e.title}
+              <div class="px-2 py-1 text-[10px] bg-blue-50 text-blue-700 rounded truncate border border-blue-100 cursor-pointer hover:bg-blue-100 transition-colors" title="${e.title}">
+                <span class="font-bold">${new Date(e.start_at).toLocaleTimeString([], {hour: 'numeric', minute:'2-digit'})}</span> ${e.title}
               </div>
             `).join('')}
           </div>
@@ -101,15 +107,23 @@ export const calendar = {
   },
 
   bindEvents() {
-    // These listeners are captured by the main.js delegation, 
-    // but you can add local logic here if needed.
+    // We attach listeners directly to the buttons now to trigger re-renders
+    const prevBtn = document.getElementById('cal-prev');
+    const nextBtn = document.getElementById('cal-next');
+    const todayBtn = document.getElementById('cal-today');
+
+    if (prevBtn) prevBtn.onclick = () => { this.changeMonth(-1); };
+    if (nextBtn) nextBtn.onclick = () => { this.changeMonth(1); };
+    if (todayBtn) todayBtn.onclick = () => { this.goToday(); };
   },
 
   changeMonth(delta) {
     viewDate.setMonth(viewDate.getMonth() + delta);
+    this.render(currentState); // Trigger UI update
   },
 
   goToday() {
     viewDate = new Date();
+    this.render(currentState); // Trigger UI update
   }
 };

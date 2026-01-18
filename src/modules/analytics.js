@@ -67,7 +67,7 @@ export const analytics = {
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-gray-50">
-                                ${this.renderYieldTable(state.properties)}
+                                ${this.renderYieldTable(state.properties || [])}
                             </tbody>
                         </table>
                     </div>
@@ -75,11 +75,11 @@ export const analytics = {
             </div>
         `;
 
-        this.initCharts(state);
+        // Delay chart initialization slightly to ensure canvas is in DOM
+        setTimeout(() => this.initCharts(state), 100);
     },
 
     calculateMetrics(state) {
-        // Logic to simulate financial ratios based on property data
         return {
             avgCapRate: 5.8,
             dscr: 1.45,
@@ -88,12 +88,14 @@ export const analytics = {
     },
 
     renderYieldTable(properties) {
-        if (properties.length === 0) return `<tr><td colspan="5" class="p-10 text-center text-gray-400 text-sm">Add properties to generate yield data.</td></tr>`;
+        if (!properties || properties.length === 0) {
+            return `<tr><td colspan="5" class="p-10 text-center text-gray-400 text-sm">Add properties to generate yield data.</td></tr>`;
+        }
         
         return properties.map(p => {
             const valuation = parseFloat(p.valuation) || 0;
             const noi = valuation * 0.06; // Assuming 6% NOI for demo
-            const yieldVal = ((noi / valuation) * 100).toFixed(2);
+            const yieldVal = valuation > 0 ? ((noi / valuation) * 100).toFixed(2) : "0.00";
 
             return `
                 <tr class="hover:bg-slate-50 transition-colors">
@@ -110,6 +112,12 @@ export const analytics = {
     },
 
     initCharts(state) {
+        // Safety check for Chart.js library
+        if (typeof Chart === 'undefined') {
+            console.warn("Chart.js not loaded. Please ensure the CDN script is in index.html");
+            return;
+        }
+
         // --- 1. ASSET MIX (Doughnut) ---
         const mixCtx = document.getElementById('assetMixChart');
         if (mixCtx) {
@@ -118,12 +126,16 @@ export const analytics = {
                 data: {
                     labels: ['Multifamily', 'Retail', 'Industrial', 'Office'],
                     datasets: [{
-                        data: [55, 15, 20, 10], // Sample Distribution
+                        data: [55, 15, 20, 10],
                         backgroundColor: ['#0f172a', '#ea580c', '#334155', '#94a3b8'],
                         borderWidth: 0
                     }]
                 },
-                options: { cutout: '75%', plugins: { legend: { position: 'bottom' } } }
+                options: { 
+                    cutout: '75%', 
+                    maintainAspectRatio: false,
+                    plugins: { legend: { position: 'bottom' } } 
+                }
             });
         }
 
@@ -142,7 +154,11 @@ export const analytics = {
                 },
                 options: {
                     indexAxis: 'y',
-                    scales: { x: { stacked: true, max: 100 }, y: { stacked: true } },
+                    maintainAspectRatio: false,
+                    scales: { 
+                        x: { stacked: true, max: 100, display: false }, 
+                        y: { stacked: true, display: false } 
+                    },
                     plugins: { legend: { position: 'bottom' } }
                 }
             });
