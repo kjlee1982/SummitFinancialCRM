@@ -27,7 +27,7 @@ import { calendar } from './modules/calendar.js';
 import { dealAnalyzer } from './modules/deal-analyzer.js';
 import { equityWaterfall } from './modules/equity-waterfall.js';
 import { marketAnalysis } from './modules/market-analysis.js';
-import { uploads } from './modules/uploads.js';
+import { uploadManager as uploads } from './utils/uploads.js';
 
 /**
  * 1. INITIALIZATION
