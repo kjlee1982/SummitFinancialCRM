@@ -1,4 +1,4 @@
-}/**
+/**
  * src/modules/llcs.js
  * Manages Legal Entities, LLC structures, and ownership mapping.
  */
