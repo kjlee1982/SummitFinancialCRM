@@ -2,7 +2,8 @@
  * src/main.js
  * The Central Command: Links all modules and orchestrates the user experience.
  */
-
+ 
+import { db } from './firebase.js';
 import { stateManager } from './state.js';
 import { router } from './router.js';
 import { authModule } from './modules/auth.js';
@@ -12,7 +13,7 @@ import { dashboard } from './modules/dashboard.js';
 import { analytics } from './modules/analytics.js';
 import { settingsModule } from './modules/settings.js';
 import { vault } from './modules/vault.js';
-import { publicPortfolio } from './modules/publicPortfolio.js';
+import { publicPortfolio } from './modules/publicportfolio.js';
 import { investorPortal } from './modules/investorPortal.js';
 import { renderDeals, showAddDealModal } from './modules/deals.js';
 import { renderProperties, showAddPropertyModal } from './modules/properties.js';
@@ -21,6 +22,13 @@ import { renderInvestors, showAddInvestorModal } from './modules/investors.js';
 import { renderContacts, showAddContactModal } from './modules/contacts.js';
 import { renderTasks, showAddTaskModal } from './modules/tasks.js';
 import { renderLLCs, showAddLLCModal } from './modules/llcs.js';
+import { activity } from './modules/activity.js';
+import { authModule } from './modules/auth.js';
+import { calendar } from './modules/calendar.js';
+import { dealAnalyzer } from './modules/deal-analyzer.js';
+import { equityWaterfall } from './modules/equity-waterfall.js';
+import { marketAnalysis } from './modules/market-analysis.js';
+import { uploads } from './modules/uploads.js';
 
 /**
  * 1. INITIALIZATION
