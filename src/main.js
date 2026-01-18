@@ -23,7 +23,6 @@ import { renderContacts, showAddContactModal } from './modules/contacts.js';
 import { renderTasks, showAddTaskModal } from './modules/tasks.js';
 import { renderLLCs, showAddLLCModal } from './modules/llcs.js';
 import { activity } from './modules/activity.js';
-import { authModule } from './modules/auth.js';
 import { calendar } from './modules/calendar.js';
 import { dealAnalyzer } from './modules/deal-analyzer.js';
 import { equityWaterfall } from './modules/equity-waterfall.js';
