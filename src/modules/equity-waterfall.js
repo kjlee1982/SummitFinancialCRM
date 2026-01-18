@@ -5,7 +5,8 @@
 
 import { formatters } from '../utils/formatters.js';
 
-export const waterfallManager = {
+// RENAME THIS from waterfallManager to equityWaterfall to match main.js
+export const equityWaterfall = {
   
   /**
    * Calculates the core capital stack for a deal.
@@ -17,7 +18,6 @@ export const waterfallManager = {
     const debtAmount = purchasePrice * ltv;
     const totalEquityRequired = purchasePrice - debtAmount + (parseFloat(deal.total_capex) || 0);
     
-    // Default 10/90 GP/LP split on equity
     const gpEquity = totalEquityRequired * 0.10;
     const lpEquity = totalEquityRequired * 0.90;
 
@@ -31,22 +31,16 @@ export const waterfallManager = {
 
   /**
    * Models a standard 2-tier Waterfall
-   * Tier 1: 100% to LPs until Preferred Return is met.
-   * Tier 2: 80/20 Split (LP/GP) thereafter.
    */
   calculateDistributions(distributableCash, terms) {
     const prefRate = parseFloat(terms.pref_rate) || 0.08;
     const gpPromote = parseFloat(terms.gp_promote_percent) / 100 || 0.20;
     const totalLpCapital = parseFloat(terms.total_lp_capital) || 1;
 
-    // 1. Calculate Preferred Return Amount
     const prefAmount = totalLpCapital * prefRate;
-    
-    // 2. Distribute to Pref
     const lpPrefPayment = Math.min(distributableCash, prefAmount);
     let remainingCash = distributableCash - lpPrefPayment;
 
-    // 3. Excess Cash Split (Promote)
     let lpExcess = 0;
     let gpPromotePayment = 0;
 
@@ -68,15 +62,14 @@ export const waterfallManager = {
   },
 
   /**
-   * Renders the Waterfall Summary Table for a specific deal
+   * Renders the Waterfall Summary Table
    */
   renderWaterfallUI(dealId, state, containerId) {
     const container = document.getElementById(containerId);
     if (!container) return;
 
-    // In a real app, you'd find the specific terms linked to this dealId
     const mockTerms = { pref_rate: 0.08, gp_promote_percent: 20, total_lp_capital: 1000000 };
-    const mockProfit = 250000; // Example annual distributable cash
+    const mockProfit = 250000;
 
     const result = this.calculateDistributions(mockProfit, mockTerms);
 
