@@ -123,25 +123,26 @@ document.getElementById('sidebarBackdrop')?.addEventListener('click', () => clos
 /**
  * 3) Rendering
  */
-function refreshCurrentView(view, state) {
+function refreshCurrentView(view) {
   const wrapper = document.getElementById('view-container-wrapper');
   if (wrapper) wrapper.scrollTop = 0;
 
+  const state = stateManager.get(); // <-- ALWAYS use the live state
+
   switch (view) {
-    case 'dashboard': dashboard.render(); break;
-    case 'analytics': analytics.render(); break;
+    case 'dashboard': dashboard.render(state); break;
+    case 'analytics': analytics.render(state); break;
 
-    case 'deals': deals.render(); break;
-    case 'properties': properties.render(); break;
-    case 'projects': projects.render(); break;
+    case 'deals': deals.render(state); break;
+    case 'properties': properties.render(state); break;
+    case 'projects': projects.render(state); break;
 
-    case 'investor-portal': investorPortal.render(); break;
-    case 'investors': investors.render(); break;
-    case 'contacts': contacts.render(); break;
-    case 'public-portfolio': publicPortfolio.render(); break;
+    case 'investor-portal': investorPortal.render(state); break;
+    case 'investors': investors.render(state); break;
+    case 'contacts': contacts.render(state); break;
+    case 'public-portfolio': publicPortfolio.render(state); break;
 
     case 'deal-analyzer': {
-      // Defensive: avoid hard-crashing the whole app if a module export regresses.
       if (dealAnalyzer && typeof dealAnalyzer.render === 'function') {
         dealAnalyzer.render(state);
       } else {
@@ -160,7 +161,9 @@ function refreshCurrentView(view, state) {
       }
       break;
     }
-    case 'market-analysis': marketAnalysis.render(); break;
+
+    case 'market-analysis': marketAnalysis.render(state); break;
+
     case 'equity-waterfall': {
       if (equityWaterfall && typeof equityWaterfall.render === 'function') {
         equityWaterfall.render(state);
@@ -181,18 +184,19 @@ function refreshCurrentView(view, state) {
       break;
     }
 
-    case 'vault': vault.render(); break;
-    case 'uploads': uploads.render(); break;
-    case 'calendar': calendar.render(); break;
-    case 'activity': activity.render(); break;
+    case 'vault': vault.render(state); break;
+    case 'uploads': uploads.render(state); break;
+    case 'calendar': calendar.render(state); break;
+    case 'activity': activity.render(state); break;
 
-    case 'tasks': tasks.render(); break;
-    case 'llcs': llcs.render(); break;
-    case 'settings': settingsModule.render(); break;
+    case 'tasks': tasks.render(state); break;
+    case 'llcs': llcs.render(state); break;
+    case 'settings': settingsModule.render(state); break;
 
-    default: dashboard.render(); break;
+    default: dashboard.render(state); break;
   }
 }
+
 
 window.addEventListener('view-changed', (e) => {
   refreshCurrentView(e.detail.view, stateManager.get());
