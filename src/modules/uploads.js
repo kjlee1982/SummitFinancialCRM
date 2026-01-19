@@ -1,67 +1,112 @@
 /**
  * src/modules/uploads.js
- * Compatibility wrapper: guarantees exports with a .render() function.
- *
- * Exports:
- *  - uploads        (preferred)
- *  - uploadManager  (backward-compatible alias)
+ * Minimal uploads view that wires into uploadManager dropzone + simple list.
  */
 
-// If you already have an internal render function name, import it here.
-// Otherwise, implement render below.
-function getHost() {
-  return document.getElementById('view-uploads');
+import { stateManager } from '../state.js';
+import { uploadManager } from '../utils/uploads.js';
+import { escapeHtml } from '../utils/formatters.js';
+
+function getUploadsForContext(ctx) {
+  const s = stateManager.get();
+  const all = Array.isArray(s.uploads) ? s.uploads : [];
+  return all.filter(u => {
+    const m = u?.meta || {};
+    return (m.dealId || null) === (ctx.dealId || null)
+      && (m.propertyId || null) === (ctx.propertyId || null)
+      && (m.investorId || null) === (ctx.investorId || null)
+      && (m.llcId || null) === (ctx.llcId || null);
+  });
 }
 
-function ensureBaseUI(host) {
-  // If your module already injects UI elsewhere, you can remove this shell.
-  // This makes sure "Uploads" view doesn't render blank.
-  host.innerHTML = `
-    <div class="p-6 md:p-8">
-      <div class="flex items-center justify-between mb-6">
-        <div>
-          <div class="text-2xl font-black text-slate-900">Uploads</div>
-          <div class="text-sm text-slate-500">Upload and organize documents for deals, properties, investors, and entities.</div>
-        </div>
-      </div>
+function renderList(ctx) {
+  const host = document.getElementById('uploads-list');
+  if (!host) return;
 
-      <div class="rounded-2xl border border-slate-200 bg-white p-6">
-        <div class="text-sm text-slate-700">
-          Uploads module is connected, but your internal UI renderer hasn’t been wired into this wrapper yet.
+  const items = getUploadsForContext(ctx);
+  if (!items.length) {
+    host.innerHTML = `<div class="text-sm text-slate-500">No uploads yet for this context.</div>`;
+    return;
+  }
+
+  host.innerHTML = `
+    <div class="space-y-2">
+      ${items.map(u => `
+        <div class="p-3 bg-white rounded-xl border border-slate-200 flex items-start justify-between gap-3">
+          <div class="min-w-0">
+            <div class="font-bold text-slate-900 truncate">${escapeHtml(u.name || 'Untitled')}</div>
+            <div class="text-xs text-slate-500 mt-0.5">
+              ${escapeHtml(u.type || '')} ${u.size ? `• ${Math.round(u.size/1024)} KB` : ''} ${u.created_at ? `• ${new Date(u.created_at).toLocaleString()}` : ''}
+            </div>
+            ${u.url ? `<a class="text-xs text-blue-600 hover:underline" href="${escapeHtml(u.url)}" target="_blank" rel="noopener noreferrer">Open</a>` : ''}
+          </div>
+          <button class="px-3 py-1.5 rounded-lg text-sm font-bold text-red-600 hover:bg-red-50" data-action="upload-delete" data-id="${escapeHtml(u.id)}">
+            Delete
+          </button>
         </div>
-        <div class="mt-3 text-xs text-slate-500">
-          If you already have a render function in this file, rename it to <span class="font-mono">render()</span> or map it inside this wrapper.
-        </div>
-      </div>
+      `).join('')}
     </div>
   `;
 }
 
-function bindOnce(host) {
-  if (host.__uploadsBound) return;
-  host.__uploadsBound = true;
+function ensureBinds() {
+  if (ensureBinds._bound) return;
+  ensureBinds._bound = true;
 
-  // Delegated handlers go here if needed later
-  host.addEventListener('click', (e) => {
-    const btn = e.target.closest('[data-upload-action]');
+  document.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-action="upload-delete"]');
     if (!btn) return;
-    // handle actions...
+
+    const id = btn.dataset.id;
+    if (!id) return;
+
+    // keep it simple (you can swap to modalManager danger confirm later)
+    if (!confirm('Delete this upload?')) return;
+
+    uploadManager.deleteUpload(id);
+    // Re-render current view (uploads render is cheap)
+    uploads.render();
   });
 }
 
-function render() {
-  const host = getHost();
-  if (!host) return;
+export const uploads = {
+  render() {
+    ensureBinds();
 
-  bindOnce(host);
+    const host = document.getElementById('view-uploads');
+    if (!host) return;
 
-  // If you already have a real renderer in THIS file, call it here.
-  // Example: realRender(host);
-  ensureBaseUI(host);
-}
+    // infer a default context (deal/property/llc/etc) from current app state
+    const ctx = uploadManager.inferContextFromState();
 
-/** Preferred export */
-export const uploads = { render };
+    host.innerHTML = `
+      <div class="p-6 md:p-8 max-w-7xl mx-auto">
+        <div class="flex items-end justify-between gap-4 mb-6">
+          <div>
+            <div class="text-3xl font-black tracking-tighter text-slate-900">Uploads</div>
+            <div class="text-sm text-slate-500 mt-1">Upload and organize documents for deals, properties, investors, and entities.</div>
+          </div>
+        </div>
 
-/** Backward-compatible export name */
-export const uploadManager = uploads;
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div class="bg-white rounded-2xl border border-slate-200 p-5">
+            <div class="font-bold text-slate-900 mb-2">Drop files</div>
+            <div id="uploads-dropzone"></div>
+            <div class="text-xs text-slate-500 mt-2">
+              Context: ${escapeHtml(uploadManager.contextLabel(ctx))}
+            </div>
+          </div>
+
+          <div class="bg-white rounded-2xl border border-slate-200 p-5">
+            <div class="font-bold text-slate-900 mb-3">Files</div>
+            <div id="uploads-list"></div>
+          </div>
+        </div>
+      </div>
+    `;
+
+    // render dropzone + list
+    uploadManager.renderDropzone('uploads-dropzone', ctx);
+    renderList(ctx);
+  }
+};
