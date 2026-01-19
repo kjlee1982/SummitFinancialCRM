@@ -24,12 +24,28 @@ import { investors } from './modules/investors.js';
 import { contacts } from './modules/contacts.js';
 import { tasks } from './modules/tasks.js';
 import { llcs } from './modules/llcs.js';
+
 import { activity } from './modules/activity.js';
 import { calendar } from './modules/calendar.js';
 import { dealAnalyzer } from './modules/deal-analyzer.js';
 import { equityWaterfall } from './modules/equity-waterfall.js';
 import { marketAnalysis } from './modules/market-analysis.js';
 import { uploadManager as uploads } from './modules/uploads.js';
+
+/**
+ * Helper: safely call handlers so missing exports don’t break event delegation.
+ */
+function safeCall(fn, label) {
+  if (typeof fn !== 'function') {
+    console.warn(`Missing handler: ${label}`);
+    return;
+  }
+  try {
+    fn();
+  } catch (e) {
+    console.error(`Handler failed: ${label}`, e);
+  }
+}
 
 /**
  * 1. INITIALIZATION
@@ -62,15 +78,33 @@ document.addEventListener('click', async (e) => {
 
   // Handle Data Actions
   switch (action) {
-    case 'deal-add':       deals.showAddDealModal(); break;
-    case 'property-add':   properties.showAddPropertyModal(); break;
-    case 'project-add':    projects.showAddProjectModal(); break;
-    case 'investor-add':   investors.showAddInvestorModal(); break;
-    case 'task-add':       tasks.showAddTaskModal(); break;
-    case 'contact-add':    contacts.showAddContactModal(); break;
-    case 'llc-add':        llcs.showAddLLCModal(); break;
-    case 'vault-add':      vault.showAddModal(); break;
+    // ---- ADD MODALS (safe-called to avoid regressions) ----
+    case 'deal-add':
+      safeCall(deals.showAddDealModal, 'deals.showAddDealModal');
+      break;
+    case 'property-add':
+      safeCall(properties.showAddPropertyModal, 'properties.showAddPropertyModal');
+      break;
+    case 'project-add':
+      safeCall(projects.showAddProjectModal, 'projects.showAddProjectModal');
+      break;
+    case 'investor-add':
+      safeCall(investors.showAddInvestorModal, 'investors.showAddInvestorModal');
+      break;
+    case 'task-add':
+      safeCall(tasks.showAddTaskModal, 'tasks.showAddTaskModal');
+      break;
+    case 'contact-add':
+      safeCall(contacts.showAddContactModal, 'contacts.showAddContactModal');
+      break;
+    case 'llc-add':
+      safeCall(llcs.showAddLLCModal, 'llcs.showAddLLCModal');
+      break;
+    case 'vault-add':
+      safeCall(vault.showAddModal, 'vault.showAddModal');
+      break;
 
+    // ---- QUICK TOGGLES / SIMPLE ACTIONS ----
     case 'task-toggle': {
       const task = state.tasks?.find(t => t.id === id);
       if (!task) {
@@ -81,6 +115,7 @@ document.addEventListener('click', async (e) => {
       break;
     }
 
+    // ---- DELETES (confirm + delete) ----
     case 'prop-delete':
       if (confirm("Permanently delete this asset?")) stateManager.delete('properties', id);
       break;
@@ -97,6 +132,7 @@ document.addEventListener('click', async (e) => {
       if (confirm("Unlink document?")) stateManager.delete('vault', id);
       break;
 
+    // ---- AUTH ----
     case 'logout':
       authModule.logout();
       break;

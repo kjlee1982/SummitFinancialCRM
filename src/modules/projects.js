@@ -1,209 +1,510 @@
 /**
  * src/modules/projects.js
- * Tracks Capital Expenditures (CapEx) and Value-Add Renovations.
+ * CapEx / Project Tracker
+ *
+ * Full overwrite updates included:
+ * - Bind-once delegated events on #view-projects
+ * - Delete uses modalManager (danger) instead of confirm()
+ * - Fully working "Manage Spend" (edit) modal
+ * - Array guards + safe percent math (no divide-by-zero)
+ * - Modal save callbacks return true (close reliably)
+ * - escapeHtml on displayed fields (prevents layout break / injection)
+ *
+ * Compatibility:
+ * - Exports `projects` (module object) and named helpers `renderProjects`, `showAddProjectModal`
  */
 
 import { stateManager } from '../state.js';
 import { formatters } from '../utils/formatters.js';
 import { modalManager } from '../utils/modals.js';
 
+function escapeHtml(s) {
+  return String(s ?? '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#039;');
+}
+
+function toNumber(v, fallback = 0) {
+  const n = parseFloat(v);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function clamp(n, min, max) {
+  const x = Number(n);
+  if (!Number.isFinite(x)) return min;
+  return Math.max(min, Math.min(max, x));
+}
+
+function getProjects(state) {
+  return Array.isArray(state?.projects) ? state.projects : [];
+}
+
+function getProperties(state) {
+  return Array.isArray(state?.properties) ? state.properties : [];
+}
+
 export const projects = {
-    /**
-     * Main render function called by the router
-     */
-    render(state) {
-        const container = document.getElementById('view-projects');
-        if (!container) return;
+  _bound: false,
+  _lastState: null,
 
-        const projectList = state.projects || [];
-        
-        // 1. Calculate Summary Stats
-        const totalBudget = projectList.reduce((sum, p) => sum + (parseFloat(p.budget) || 0), 0);
-        const totalSpent = projectList.reduce((sum, p) => sum + (parseFloat(p.spent) || 0), 0);
-        const activeCount = projectList.filter(p => p.status !== 'Completed').length;
-        const aggregateVariance = totalBudget - totalSpent;
+  render(state) {
+    const container = document.getElementById('view-projects');
+    if (!container) return;
 
-        container.innerHTML = `
-            <div class="p-6 max-w-7xl mx-auto">
-                <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
-                    <div>
-                        <h2 class="text-2xl font-black text-slate-900 tracking-tight">CapEx & Value-Add</h2>
-                        <p class="text-sm text-slate-500 font-medium">
-                            ${activeCount} Active Initiatives • Total Pipeline: ${formatters.compact(totalBudget)}
-                        </p>
-                    </div>
-                    <button id="add-project-btn" class="bg-slate-900 text-white px-5 py-2.5 rounded-xl hover:bg-slate-800 font-bold shadow-sm transition-all flex items-center text-sm">
-                        <i class="fa fa-tools mr-2 text-[10px]"></i>New Project
-                    </button>
-                </div>
+    this._lastState = state;
 
-                <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm mb-8">
-                    <div class="flex justify-between items-end mb-3">
-                        <div>
-                            <span class="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">Portfolio Allocation</span>
-                            <span class="text-xl font-black text-slate-900">${formatters.dollars(totalSpent)} <span class="text-slate-300 font-medium text-sm">deployed of</span> ${formatters.dollars(totalBudget)}</span>
-                        </div>
-                        <div class="text-right">
-                            <span class="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">Remaining Buffer</span>
-                            <span class="text-sm font-bold ${aggregateVariance < 0 ? 'text-red-500' : 'text-emerald-600'}">
-                                ${formatters.dollars(aggregateVariance)}
-                            </span>
-                        </div>
-                    </div>
-                    <div class="w-full bg-slate-100 h-3 rounded-full overflow-hidden flex">
-                        <div class="bg-orange-500 h-full transition-all duration-1000 ease-out" style="width: ${(totalSpent / totalBudget) * 100 || 0}%"></div>
-                    </div>
-                </div>
+    const projectList = getProjects(state);
 
-                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    ${this.renderProjectCards(projectList)}
-                </div>
+    const totalBudget = projectList.reduce((sum, p) => sum + toNumber(p?.budget, 0), 0);
+    const totalSpent = projectList.reduce((sum, p) => sum + toNumber(p?.spent, 0), 0);
+    const overallPct = totalBudget > 0 ? clamp((totalSpent / totalBudget) * 100, 0, 100) : 0;
+
+    container.innerHTML = `
+      <div class="p-6">
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
+          <div>
+            <h2 class="text-2xl font-bold text-gray-900">Project Tracker</h2>
+            <p class="text-sm text-gray-500 font-medium">
+              ${projectList.length} active projects • Budget: ${formatters.dollars(totalBudget)} • Spent: ${formatters.dollars(totalSpent)}
+            </p>
+          </div>
+
+          <button id="add-project-btn"
+            class="bg-slate-900 text-white px-5 py-2.5 rounded-lg hover:bg-slate-800 font-bold shadow-sm transition-all flex items-center text-sm">
+            <i class="fa fa-plus mr-2"></i>Add Project
+          </button>
+        </div>
+
+        <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-5 mb-6">
+          <div class="flex items-center justify-between">
+            <div>
+              <p class="text-[10px] font-black text-gray-400 uppercase tracking-widest">Portfolio CapEx Progress</p>
+              <p class="text-sm font-bold text-gray-900 mt-1">
+                ${formatters.dollars(totalSpent)} / ${formatters.dollars(totalBudget)}
+              </p>
             </div>
-        `;
-
-        this.bindEvents();
-    },
-
-    renderProjectCards(projectList) {
-        if (projectList.length === 0) {
-            return `
-                <div class="col-span-full py-20 text-center text-slate-400 border-2 border-dashed border-slate-200 rounded-2xl bg-white">
-                    <i class="fa fa-hard-hat text-4xl mb-4 opacity-20"></i>
-                    <p class="font-bold uppercase tracking-widest text-xs">No active CapEx projects found</p>
-                </div>`;
-        }
-
-        return projectList.map(proj => {
-            const percentComplete = proj.status === 'Completed' ? 100 : (proj.percent_complete || 0);
-            const variance = proj.budget - proj.spent;
-            const statusClass = this.getStatusClass(proj.status);
-            
-            return `
-                <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden hover:shadow-xl hover:border-slate-300 transition-all group">
-                    <div class="p-5">
-                        <div class="flex justify-between items-start mb-4">
-                            <div>
-                                <span class="text-[9px] font-black text-orange-600 uppercase bg-orange-50 border border-orange-100 px-2 py-0.5 rounded-md tracking-tighter">${proj.property}</span>
-                                <h3 class="font-black text-slate-900 text-lg mt-1 group-hover:text-orange-600 transition-colors">${proj.name}</h3>
-                            </div>
-                            <button data-action="project-delete" data-id="${proj.id}" class="text-slate-200 hover:text-red-500 transition-colors">
-                                <i class="fa fa-times-circle"></i>
-                            </button>
-                        </div>
-
-                        <div class="space-y-5">
-                            <div>
-                                <div class="flex justify-between text-[10px] font-black uppercase mb-1.5 tracking-widest">
-                                    <span class="text-slate-400">Progress</span>
-                                    <span class="text-slate-900">${percentComplete}%</span>
-                                </div>
-                                <div class="w-full bg-slate-50 h-2 rounded-full border border-slate-100">
-                                    <div class="bg-slate-900 h-full rounded-full transition-all duration-700" style="width: ${percentComplete}%"></div>
-                                </div>
-                            </div>
-
-                            <div class="grid grid-cols-2 gap-4">
-                                <div class="p-3 bg-slate-50 rounded-xl border border-slate-100">
-                                    <p class="text-[9px] text-slate-400 font-black uppercase tracking-widest mb-1">Budgeted</p>
-                                    <p class="text-sm font-black text-slate-900">${formatters.compact(proj.budget)}</p>
-                                </div>
-                                <div class="p-3 bg-slate-50 rounded-xl border border-slate-100">
-                                    <p class="text-[9px] text-slate-400 font-black uppercase tracking-widest mb-1">Status</p>
-                                    <span class="text-[10px] font-black uppercase ${statusClass}">${proj.status}</span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="px-5 py-4 bg-slate-50/50 border-t border-slate-100 flex justify-between items-center">
-                        <div class="flex flex-col">
-                            <span class="text-[10px] text-slate-400 font-bold uppercase tracking-tighter leading-none mb-1">Lead Vendor</span>
-                            <span class="text-xs font-black text-slate-700 truncate max-w-[120px]">${proj.lead || 'Internal'}</span>
-                        </div>
-                        <button data-action="project-edit" data-id="${proj.id}" class="bg-white border border-slate-200 text-slate-900 text-[10px] font-black uppercase px-3 py-1.5 rounded-lg hover:border-slate-900 transition-all shadow-sm">
-                            Manage Spend
-                        </button>
-                    </div>
-                </div>
-            `;
-        }).join('');
-    },
-
-    bindEvents() {
-        const addBtn = document.getElementById('add-project-btn');
-        if (addBtn) addBtn.onclick = () => this.showAddProjectModal();
-
-        document.querySelectorAll('[data-action="project-delete"]').forEach(btn => {
-            btn.onclick = (e) => {
-                const id = e.currentTarget.dataset.id;
-                if (confirm("Cancel this project?")) stateManager.delete('projects', id);
-            };
-        });
-    },
-
-    showAddProjectModal() {
-        const state = stateManager.get();
-        const propertyOptions = (state.properties || []).map(p => `<option value="${p.name}">${p.name}</option>`).join('');
-
-        const formHtml = `
-            <div class="space-y-5">
-                <div>
-                    <label class="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Scope of Work</label>
-                    <input type="text" id="proj-name" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-slate-900 transition-all" placeholder="e.g. Lobby Renovation">
-                </div>
-                <div>
-                    <label class="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Asset Selection</label>
-                    <select id="proj-property" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none cursor-pointer">
-                        <option value="">Select Property...</option>
-                        ${propertyOptions}
-                    </select>
-                </div>
-                <div class="grid grid-cols-2 gap-4">
-                    <div>
-                        <label class="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Total Budget ($)</label>
-                        <input type="number" id="proj-budget" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none" placeholder="0">
-                    </div>
-                    <div>
-                        <label class="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Current Status</label>
-                        <select id="proj-status" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none cursor-pointer">
-                            <option>Planning</option>
-                            <option>In Progress</option>
-                            <option>On Hold</option>
-                            <option>Completed</option>
-                        </select>
-                    </div>
-                </div>
-                <div>
-                    <label class="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">General Contractor / Vendor</label>
-                    <input type="text" id="proj-lead" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none" placeholder="e.g. Summit Construction LLC">
-                </div>
+            <div class="text-right">
+              <p class="text-[10px] font-black text-gray-400 uppercase tracking-widest">Completion</p>
+              <p class="text-2xl font-black text-slate-900">${Math.round(overallPct)}%</p>
             </div>
-        `;
+          </div>
+          <div class="w-full bg-gray-100 h-2 rounded-full overflow-hidden mt-4">
+            <div class="bg-orange-500 h-full" style="width:${overallPct}%"></div>
+          </div>
+        </div>
 
-        modalManager.show("New CapEx Project", formHtml, () => {
-            const data = {
-                name: document.getElementById('proj-name').value,
-                property: document.getElementById('proj-property').value,
-                budget: parseFloat(document.getElementById('proj-budget').value) || 0,
-                status: document.getElementById('proj-status').value,
-                lead: document.getElementById('proj-lead').value,
-                spent: 0,
-                percent_complete: 0,
-                createdAt: new Date().toISOString()
-            };
+        <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-6">
+          ${this.renderProjectCards(projectList)}
+        </div>
+      </div>
+    `;
 
-            if (data.name && data.property) {
-                stateManager.add('projects', data);
-            }
-        });
-    },
+    this.bindEvents();
+  },
 
-    getStatusClass(status) {
-        switch (status) {
-            case 'Completed': return 'text-emerald-600';
-            case 'In Progress': return 'text-blue-600';
-            case 'Planning': return 'text-amber-600';
-            default: return 'text-slate-400';
-        }
+  renderProjectCards(projectList) {
+    if (!projectList || projectList.length === 0) {
+      return `
+        <div class="col-span-full py-20 text-center text-gray-400 border-2 border-dashed border-gray-200 rounded-xl bg-white">
+          <i class="fa fa-screwdriver-wrench text-4xl mb-3 opacity-20"></i>
+          <p>No projects yet.</p>
+        </div>
+      `;
     }
+
+    return projectList.map((proj) => {
+      const id = escapeHtml(proj?.id);
+      const name = escapeHtml(proj?.name || 'Untitled Project');
+      const property = escapeHtml(proj?.property || 'Unassigned');
+      const status = escapeHtml(proj?.status || 'Active');
+      const lead = escapeHtml(proj?.lead || 'Unassigned');
+
+      const budget = toNumber(proj?.budget, 0);
+      const spent = toNumber(proj?.spent, 0);
+      const variance = budget - spent;
+
+      const percentComplete =
+        normalizeKey(proj?.status) === 'completed'
+          ? 100
+          : clamp(toNumber(proj?.percent_complete, 0), 0, 100);
+
+      const spendPct = budget > 0 ? clamp((spent / budget) * 100, 0, 100) : 0;
+
+      return `
+        <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden hover:shadow-md transition-shadow group">
+          <div class="p-5">
+            <div class="flex justify-between items-start mb-3">
+              <span class="px-2 py-1 rounded text-[10px] font-bold uppercase ${this.getStatusClass(status)}">
+                ${status}
+              </span>
+
+              <div class="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                <button data-action="project-edit" data-id="${id}"
+                  class="text-gray-400 hover:text-slate-700" title="Manage Spend">
+                  <i class="fa fa-pen text-xs"></i>
+                </button>
+                <button data-action="project-delete" data-id="${id}"
+                  class="text-gray-400 hover:text-red-500" title="Cancel Project">
+                  <i class="fa fa-trash text-xs"></i>
+                </button>
+              </div>
+            </div>
+
+            <h3 class="font-bold text-gray-900 text-lg mb-1 truncate">${name}</h3>
+            <p class="text-xs text-gray-500 mb-4 truncate">
+              <i class="fa fa-building mr-1"></i>${property}
+            </p>
+
+            <div class="space-y-3">
+              <div class="flex items-center justify-between text-sm">
+                <span class="text-gray-500 font-semibold">Budget</span>
+                <span class="font-black text-gray-900">${formatters.dollars(budget)}</span>
+              </div>
+              <div class="flex items-center justify-between text-sm">
+                <span class="text-gray-500 font-semibold">Spent</span>
+                <span class="font-black text-gray-900">${formatters.dollars(spent)}</span>
+              </div>
+              <div class="flex items-center justify-between text-sm">
+                <span class="text-gray-500 font-semibold">Variance</span>
+                <span class="font-black ${variance >= 0 ? 'text-emerald-600' : 'text-red-600'}">
+                  ${variance >= 0 ? '' : '('}${formatters.dollars(Math.abs(variance))}${variance >= 0 ? '' : ')'}
+                </span>
+              </div>
+            </div>
+
+            <div class="mt-5">
+              <div class="flex items-center justify-between mb-2">
+                <span class="text-[10px] font-black text-gray-400 uppercase tracking-widest">Progress</span>
+                <span class="text-[10px] font-black text-slate-700 uppercase">${Math.round(percentComplete)}%</span>
+              </div>
+              <div class="w-full bg-gray-100 h-2 rounded-full overflow-hidden">
+                <div class="bg-slate-900 h-full" style="width:${percentComplete}%"></div>
+              </div>
+
+              <div class="flex items-center justify-between mt-3">
+                <span class="text-[10px] font-black text-gray-400 uppercase tracking-widest">Spend</span>
+                <span class="text-[10px] font-black text-orange-600 uppercase">${Math.round(spendPct)}%</span>
+              </div>
+              <div class="w-full bg-gray-100 h-1.5 rounded-full overflow-hidden mt-1">
+                <div class="bg-orange-500 h-full" style="width:${spendPct}%"></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="bg-gray-50 px-5 py-3 flex justify-between items-center">
+            <span class="text-[10px] font-bold text-gray-400 uppercase tracking-tighter">Lead: ${lead}</span>
+            <button data-action="project-edit" data-id="${id}"
+              class="text-xs font-bold text-slate-600 hover:text-orange-600 transition-colors">
+              Manage Spend <i class="fa fa-chevron-right ml-1"></i>
+            </button>
+          </div>
+        </div>
+      `;
+    }).join('');
+  },
+
+  bindEvents() {
+    const container = document.getElementById('view-projects');
+    if (!container) return;
+
+    const addBtn = document.getElementById('add-project-btn');
+    if (addBtn) addBtn.onclick = () => this.showAddProjectModal();
+
+    if (this._bound) return;
+    this._bound = true;
+
+    container.addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-action]');
+      if (!btn) return;
+
+      const action = btn.dataset.action;
+      const id = btn.dataset.id;
+
+      if (action === 'project-delete') {
+        this.confirmDelete(id);
+        return;
+      }
+
+      if (action === 'project-edit') {
+        this.openEditById(id);
+      }
+    });
+  },
+
+  confirmDelete(id) {
+    const list = getProjects(this._lastState);
+    const proj = list.find((p) => String(p?.id) === String(id));
+    const label = proj?.name ? `“${proj.name}”` : 'this project';
+
+    modalManager.show(
+      'Cancel project',
+      `<p class="text-sm font-semibold text-slate-700">Cancel ${escapeHtml(label)}? This cannot be undone.</p>`,
+      () => {
+        stateManager.delete('projects', id);
+        return true;
+      },
+      { submitLabel: 'Cancel Project', cancelLabel: 'Keep', danger: true }
+    );
+  },
+
+  openEditById(id) {
+    const list = getProjects(this._lastState);
+    const proj = list.find((p) => String(p?.id) === String(id));
+
+    if (!proj) {
+      modalManager.show(
+        'Project not found',
+        `<p class="text-sm font-semibold text-slate-700">That project could not be found. It may have been deleted or not synced yet.</p>`,
+        () => true,
+        { submitLabel: 'Close', hideCancel: true }
+      );
+      return;
+    }
+
+    this.showEditProjectModal(proj);
+  },
+
+  showAddProjectModal() {
+    const props = getProperties(this._lastState);
+
+    const formHtml = `
+      <div class="space-y-5">
+        <div>
+          <label class="block text-xs font-bold text-gray-400 uppercase mb-1">Project Name</label>
+          <input type="text" id="proj-name"
+            class="w-full p-3 border rounded-lg focus:ring-2 focus:ring-orange-500 outline-none"
+            placeholder="e.g. Unit Turns - Phase 1">
+        </div>
+
+        <div>
+          <label class="block text-xs font-bold text-gray-400 uppercase mb-1">Property</label>
+          <select id="proj-property"
+            class="w-full p-3 border rounded-lg focus:ring-2 focus:ring-orange-500 outline-none">
+            <option value="">Unassigned</option>
+            ${props.map(p => `<option value="${escapeHtml(p?.name)}">${escapeHtml(p?.name || 'Unnamed Property')}</option>`).join('')}
+          </select>
+        </div>
+
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label class="block text-xs font-bold text-gray-400 uppercase mb-1">Budget</label>
+            <input type="number" id="proj-budget"
+              class="w-full p-3 border rounded-lg focus:ring-2 focus:ring-orange-500 outline-none"
+              value="0" min="0" step="1000">
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-gray-400 uppercase mb-1">Spent</label>
+            <input type="number" id="proj-spent"
+              class="w-full p-3 border rounded-lg focus:ring-2 focus:ring-orange-500 outline-none"
+              value="0" min="0" step="1000">
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label class="block text-xs font-bold text-gray-400 uppercase mb-1">Lead</label>
+            <input type="text" id="proj-lead"
+              class="w-full p-3 border rounded-lg focus:ring-2 focus:ring-orange-500 outline-none"
+              placeholder="e.g. PM / GC / Owner">
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-gray-400 uppercase mb-1">Status</label>
+            <select id="proj-status"
+              class="w-full p-3 border rounded-lg focus:ring-2 focus:ring-orange-500 outline-none">
+              ${['Active', 'Paused', 'Completed', 'Cancelled'].map(s => `<option>${escapeHtml(s)}</option>`).join('')}
+            </select>
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-xs font-bold text-gray-400 uppercase mb-1">Percent Complete</label>
+          <input type="number" id="proj-percent"
+            class="w-full p-3 border rounded-lg focus:ring-2 focus:ring-orange-500 outline-none"
+            value="0" min="0" max="100" step="1">
+        </div>
+      </div>
+    `;
+
+    modalManager.show(
+      'Add Project',
+      formHtml,
+      () => {
+        const data = this.readProjectFormData();
+
+        if (!data.name) throw new Error('Project name is required.');
+
+        const now = new Date().toISOString();
+        data.created_at = now;
+        data.createdAt = now;
+
+        stateManager.add('projects', data);
+        return true;
+      },
+      { submitLabel: 'Add', cancelLabel: 'Cancel' }
+    );
+  },
+
+  showEditProjectModal(proj) {
+    const props = getProperties(this._lastState);
+
+    const name = escapeHtml(proj?.name || '');
+    const property = escapeHtml(proj?.property || '');
+    const budget = toNumber(proj?.budget, 0);
+    const spent = toNumber(proj?.spent, 0);
+    const lead = escapeHtml(proj?.lead || '');
+    const status = escapeHtml(proj?.status || 'Active');
+    const percent = clamp(
+      normalizeKey(proj?.status) === 'completed' ? 100 : toNumber(proj?.percent_complete, 0),
+      0,
+      100
+    );
+
+    const formHtml = `
+      <div class="space-y-5">
+        <div>
+          <label class="block text-xs font-bold text-gray-400 uppercase mb-1">Project Name</label>
+          <input type="text" id="proj-name"
+            class="w-full p-3 border rounded-lg focus:ring-2 focus:ring-orange-500 outline-none"
+            value="${name}">
+        </div>
+
+        <div>
+          <label class="block text-xs font-bold text-gray-400 uppercase mb-1">Property</label>
+          <select id="proj-property"
+            class="w-full p-3 border rounded-lg focus:ring-2 focus:ring-orange-500 outline-none">
+            <option value="">Unassigned</option>
+            ${props.map(p => {
+              const val = String(p?.name || '');
+              const selected = val === property ? 'selected' : '';
+              return `<option value="${escapeHtml(val)}" ${selected}>${escapeHtml(val || 'Unnamed Property')}</option>`;
+            }).join('')}
+          </select>
+        </div>
+
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label class="block text-xs font-bold text-gray-400 uppercase mb-1">Budget</label>
+            <input type="number" id="proj-budget"
+              class="w-full p-3 border rounded-lg focus:ring-2 focus:ring-orange-500 outline-none"
+              value="${budget}" min="0" step="1000">
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-gray-400 uppercase mb-1">Spent</label>
+            <input type="number" id="proj-spent"
+              class="w-full p-3 border rounded-lg focus:ring-2 focus:ring-orange-500 outline-none"
+              value="${spent}" min="0" step="1000">
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label class="block text-xs font-bold text-gray-400 uppercase mb-1">Lead</label>
+            <input type="text" id="proj-lead"
+              class="w-full p-3 border rounded-lg focus:ring-2 focus:ring-orange-500 outline-none"
+              value="${lead}" placeholder="e.g. PM / GC / Owner">
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-gray-400 uppercase mb-1">Status</label>
+            <select id="proj-status"
+              class="w-full p-3 border rounded-lg focus:ring-2 focus:ring-orange-500 outline-none">
+              ${['Active', 'Paused', 'Completed', 'Cancelled'].map(s => {
+                const sel = s === status ? 'selected' : '';
+                return `<option ${sel}>${escapeHtml(s)}</option>`;
+              }).join('')}
+            </select>
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-xs font-bold text-gray-400 uppercase mb-1">Percent Complete</label>
+          <input type="number" id="proj-percent"
+            class="w-full p-3 border rounded-lg focus:ring-2 focus:ring-orange-500 outline-none"
+            value="${percent}" min="0" max="100" step="1">
+        </div>
+
+        <div class="p-4 bg-slate-50 rounded-xl border border-slate-200">
+          <div class="flex items-center justify-between text-sm font-bold text-slate-700">
+            <span>Variance</span>
+            <span id="proj-variance-live">${formatters.dollars(budget - spent)}</span>
+          </div>
+          <p class="text-[11px] font-semibold text-slate-400 mt-1">
+            Tip: Update budget/spend and your cards + portfolio bar will reflect immediately after saving.
+          </p>
+        </div>
+      </div>
+    `;
+
+    modalManager.show(
+      'Manage Spend',
+      formHtml,
+      () => {
+        const patch = this.readProjectFormData();
+
+        if (!patch.name) throw new Error('Project name is required.');
+
+        // If status is completed, force percent to 100
+        if (normalizeKey(patch.status) === 'completed') {
+          patch.percent_complete = 100;
+        } else {
+          patch.percent_complete = clamp(patch.percent_complete, 0, 100);
+        }
+
+        const now = new Date().toISOString();
+        patch.updated_at = now;
+        patch.updatedAt = now;
+
+        stateManager.update('projects', proj.id, patch);
+        return true;
+      },
+      { submitLabel: 'Save', cancelLabel: 'Cancel' }
+    );
+
+    // Optional: live variance update while modal open (safe guards)
+    setTimeout(() => {
+      const b = document.getElementById('proj-budget');
+      const s = document.getElementById('proj-spent');
+      const out = document.getElementById('proj-variance-live');
+      if (!b || !s || !out) return;
+
+      const update = () => {
+        const budgetNow = toNumber(b.value, 0);
+        const spentNow = toNumber(s.value, 0);
+        out.textContent = formatters.dollars(budgetNow - spentNow);
+      };
+
+      b.addEventListener('input', update);
+      s.addEventListener('input', update);
+    }, 0);
+  },
+
+  readProjectFormData() {
+    return {
+      name: String(document.getElementById('proj-name')?.value ?? '').trim(),
+      property: String(document.getElementById('proj-property')?.value ?? '').trim(),
+      budget: toNumber(document.getElementById('proj-budget')?.value, 0),
+      spent: toNumber(document.getElementById('proj-spent')?.value, 0),
+      lead: String(document.getElementById('proj-lead')?.value ?? '').trim(),
+      status: String(document.getElementById('proj-status')?.value ?? 'Active').trim(),
+      percent_complete: clamp(toNumber(document.getElementById('proj-percent')?.value, 0), 0, 100)
+    };
+  },
+
+  getStatusClass(status) {
+    const s = normalizeKey(status);
+    if (s === 'completed') return 'bg-emerald-100 text-emerald-700';
+    if (s === 'paused') return 'bg-amber-100 text-amber-700';
+    if (s === 'cancelled') return 'bg-red-100 text-red-700';
+    return 'bg-slate-100 text-slate-600';
+  }
 };
+
+function normalizeKey(v) {
+  return String(v ?? '').trim().toLowerCase();
+}
+
+// Compatibility exports
+export const renderProjects = (state) => projects.render(state);
+export const showAddProjectModal = () => projects.showAddProjectModal();

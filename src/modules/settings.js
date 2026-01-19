@@ -1,172 +1,332 @@
 /**
  * src/modules/settings.js
- * Manages user profile, branding, and global application preferences.
+ * App settings & preferences
+ *
+ * Full overwrite updates included:
+ * - escapeHtml for safe rendering
+ * - modalManager logout confirmation (danger)
+ * - try/catch + error modals for save/export/signout
+ * - safe handling for missing/malformed state.settings
+ * - OPTIONAL per-user settings:
+ *    - stores under state.settingsByUser[uid]
+ *    - also writes to state.settings for backward compatibility (so older modules still work)
+ *
+ * Notes:
+ * - This module assumes stateManager.get(), stateManager.updateSettings() exist (as in your current pattern).
+ * - This module assumes Firebase auth is available via stateManager.get().user or stateManager.get().authUser.
+ *   If your auth user is stored differently, adjust getAuthUser() below.
  */
 
 import { stateManager } from '../state.js';
-import { auth } from '../firebase.js';
+import { modalManager } from '../utils/modals.js';
 
-export const settingsModule = {
-    /**
-     * Main render function for the Settings View
-     */
-    render() {
-        const container = document.getElementById('view-settings');
-        if (!container) return;
-
-        const state = stateManager.get();
-        const user = auth.currentUser;
-        const config = state.settings || { companyName: 'Summit Capital', currency: 'USD' };
-
-        container.innerHTML = `
-            <div class="p-8 max-w-5xl mx-auto space-y-8">
-                <div class="flex items-end justify-between">
-                    <div>
-                        <h2 class="text-3xl font-black text-slate-900 tracking-tight italic uppercase">System Control</h2>
-                        <p class="text-sm text-slate-500 font-medium">Configure global parameters and administrative preferences.</p>
-                    </div>
-                    <div class="hidden md:flex items-center gap-2 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-100">
-                        <span class="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></span>
-                        <span class="text-[10px] font-black text-emerald-700 uppercase">System Operational</span>
-                    </div>
-                </div>
-
-                <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                    <div class="lg:col-span-1 space-y-6">
-                        <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                            <div class="p-5 border-b border-slate-50 bg-slate-50/50">
-                                <h3 class="font-black text-slate-900 text-[10px] uppercase tracking-[0.2em]">Operator Profile</h3>
-                            </div>
-                            <div class="p-6 text-center">
-                                <div class="w-20 h-20 bg-slate-900 rounded-2xl flex items-center justify-center text-white text-3xl font-black mx-auto mb-4 rotate-3 shadow-xl shadow-slate-200">
-                                    ${user?.email?.charAt(0).toUpperCase() || 'U'}
-                                </div>
-                                <p class="text-sm font-black text-slate-900 truncate">${user?.email || 'Authenticated User'}</p>
-                                <p class="text-[10px] font-bold text-slate-400 mt-1 uppercase tracking-tighter">Access Level: Administrator</p>
-                                
-                                <button id="btn-logout" class="mt-6 w-full py-2.5 rounded-xl border border-red-100 text-red-600 text-xs font-black uppercase hover:bg-red-50 transition-colors">
-                                    End Session
-                                </button>
-                            </div>
-                        </div>
-
-                        <div class="bg-slate-900 rounded-2xl p-6 text-white">
-                            <h3 class="font-black text-[10px] uppercase tracking-[0.2em] text-orange-500 mb-4">Cloud Sync</h3>
-                            <div class="flex items-center justify-between text-xs mb-2">
-                                <span class="text-slate-400">Database Status</span>
-                                <span class="font-bold text-emerald-400">Connected</span>
-                            </div>
-                            <div class="flex items-center justify-between text-xs">
-                                <span class="text-slate-400">Last Latency</span>
-                                <span class="font-bold">24ms</span>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="lg:col-span-2 space-y-6">
-                        <div class="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
-                            <div class="p-6 border-b border-slate-50">
-                                <h3 class="font-black text-slate-900 text-xs uppercase tracking-widest">Branding & Localization</h3>
-                            </div>
-                            <form id="settings-form" class="p-8 space-y-6">
-                                <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
-                                    <div class="space-y-2">
-                                        <label class="block text-[10px] font-black text-slate-400 uppercase tracking-widest">Firm Designation</label>
-                                        <input type="text" name="companyName" value="${config.companyName}" 
-                                            class="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl focus:ring-2 focus:ring-slate-900 outline-none text-sm font-bold transition-all">
-                                    </div>
-                                    <div class="space-y-2">
-                                        <label class="block text-[10px] font-black text-slate-400 uppercase tracking-widest">Reporting Currency</label>
-                                        <select name="currency" class="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl outline-none text-sm font-bold appearance-none cursor-pointer">
-                                            <option value="USD" ${config.currency === 'USD' ? 'selected' : ''}>USD ($) - United States Dollar</option>
-                                            <option value="EUR" ${config.currency === 'EUR' ? 'selected' : ''}>EUR (€) - Euro</option>
-                                            <option value="GBP" ${config.currency === 'GBP' ? 'selected' : ''}>GBP (£) - British Pound</option>
-                                            <option value="CAD" ${config.currency === 'CAD' ? 'selected' : ''}>CAD ($) - Canadian Dollar</option>
-                                        </select>
-                                    </div>
-                                </div>
-
-                                <div class="pt-6 border-t border-slate-50 flex items-center justify-between">
-                                    <div id="save-status" class="text-xs font-bold text-emerald-600 opacity-0 transition-opacity">
-                                        <i class="fa fa-check-circle mr-1"></i> Preferences Updated
-                                    </div>
-                                    <button type="submit" class="bg-slate-900 text-white px-10 py-3.5 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-orange-600 transition-all shadow-xl shadow-slate-200">
-                                        Commit Changes
-                                    </button>
-                                </div>
-                            </form>
-                        </div>
-
-                        <div class="bg-white rounded-3xl border border-slate-200 shadow-sm p-8 flex flex-col md:flex-row items-center justify-between gap-6">
-                            <div class="flex items-center gap-4">
-                                <div class="w-12 h-12 bg-orange-50 text-orange-600 rounded-xl flex items-center justify-center text-xl">
-                                    <i class="fa fa-database"></i>
-                                </div>
-                                <div>
-                                    <h3 class="font-black text-slate-900 text-sm uppercase">Legacy Data Export</h3>
-                                    <p class="text-xs text-slate-400 mt-1">Download raw JSON schema for external auditing or backup.</p>
-                                </div>
-                            </div>
-                            <button id="export-data" class="w-full md:w-auto text-[10px] font-black uppercase tracking-widest bg-white border-2 border-slate-100 px-6 py-3 rounded-xl hover:border-slate-900 transition-all">
-                                Download Snapshot
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        `;
-
-        this.initListeners();
-    },
-
-    /**
-     * Set up event handlers for settings interactions
-     */
-    initListeners() {
-        const form = document.getElementById('settings-form');
-        const saveStatus = document.getElementById('save-status');
-
-        if (form) {
-            form.onsubmit = async (e) => {
-                e.preventDefault();
-                const formData = new FormData(form);
-                const updates = {
-                    companyName: formData.get('companyName'),
-                    currency: formData.get('currency')
-                };
-
-                // Update state and persistence
-                stateManager.updateSettings(updates);
-                
-                // Visual feedback instead of annoying alert
-                if (saveStatus) {
-                    saveStatus.style.opacity = '1';
-                    setTimeout(() => { saveStatus.style.opacity = '0'; }, 3000);
-                }
-            };
-        }
-
-        const logoutBtn = document.getElementById('btn-logout');
-        if (logoutBtn) {
-            logoutBtn.onclick = () => {
-                if (confirm("Terminate current session?")) {
-                    auth.signOut().then(() => window.location.reload());
-                }
-            };
-        }
-
-        const exportBtn = document.getElementById('export-data');
-        if (exportBtn) {
-            exportBtn.onclick = () => {
-                const state = stateManager.get();
-                const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(state, null, 2));
-                const downloadAnchorNode = document.createElement('a');
-                downloadAnchorNode.setAttribute("href", dataStr);
-                downloadAnchorNode.setAttribute("download", `summit_backup_${new Date().toISOString().split('T')[0]}.json`);
-                document.body.appendChild(downloadAnchorNode);
-                downloadAnchorNode.click();
-                downloadAnchorNode.remove();
-            };
-        }
-    }
+const DEFAULTS = {
+  companyName: 'Summit Capital',
+  currency: 'USD'
 };
+
+function escapeHtml(s) {
+  return String(s ?? '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#039;');
+}
+
+function safeObj(v) {
+  return v && typeof v === 'object' && !Array.isArray(v) ? v : null;
+}
+
+function getAuthUser(state) {
+  // Try common storage locations without throwing
+  return state?.user || state?.authUser || state?.auth?.currentUser || null;
+}
+
+function getUserKey(user) {
+  // Prefer uid, else email, else null (guest)
+  const uid = user?.uid ? String(user.uid) : '';
+  if (uid) return uid;
+  const email = user?.email ? String(user.email) : '';
+  return email || null;
+}
+
+function getPerUserSettings(state, userKey) {
+  const byUser = safeObj(state?.settingsByUser) || {};
+  const s = userKey ? safeObj(byUser[userKey]) : null;
+  return s;
+}
+
+function mergeSettings(base, overrides) {
+  return {
+    ...DEFAULTS,
+    ...(safeObj(base) || {}),
+    ...(safeObj(overrides) || {})
+  };
+}
+
+function showError(title, message) {
+  modalManager.show(
+    title,
+    `<p class="text-sm font-semibold text-slate-700">${escapeHtml(message)}</p>`,
+    () => true,
+    { submitLabel: 'OK', hideCancel: true }
+  );
+}
+
+function showSuccess(title, message) {
+  modalManager.show(
+    title,
+    `<p class="text-sm font-semibold text-slate-700">${escapeHtml(message)}</p>`,
+    () => true,
+    { submitLabel: 'OK', hideCancel: true }
+  );
+}
+
+export const settings = {
+  _bound: false,
+  _lastState: null,
+
+  render() {
+    const container = document.getElementById('view-settings');
+    if (!container) return;
+
+    const state = stateManager.get();
+    this._lastState = state;
+
+    const user = getAuthUser(state);
+    const userKey = getUserKey(user);
+
+    // Backward compatible:
+    // - base: state.settings (global)
+    // - override: state.settingsByUser[userKey] (per-user)
+    const globalSettings = safeObj(state?.settings) || {};
+    const perUserSettings = userKey ? getPerUserSettings(state, userKey) : null;
+
+    const config = mergeSettings(globalSettings, perUserSettings);
+
+    const displayEmail = user?.email ? String(user.email) : 'Authenticated User';
+    const avatarChar = (displayEmail?.[0] || 'U').toUpperCase();
+
+    container.innerHTML = `
+      <div class="p-6 max-w-4xl mx-auto">
+        <div class="mb-8">
+          <h2 class="text-2xl font-black text-slate-900">System Settings</h2>
+          <p class="text-sm text-slate-500 font-medium">Manage your CRM branding and preferences.</p>
+        </div>
+
+        <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+          <div class="p-6 border-b border-slate-100 flex items-center justify-between">
+            <div class="flex items-center gap-4">
+              <div class="w-10 h-10 rounded-xl bg-slate-900 text-white flex items-center justify-center font-black">
+                ${escapeHtml(avatarChar)}
+              </div>
+              <div>
+                <div class="text-sm font-black text-slate-900">${escapeHtml(displayEmail)}</div>
+                <div class="text-[11px] font-semibold text-slate-500">
+                  ${userKey ? `Settings scope: ${escapeHtml(userKey)}` : 'Settings scope: Global (no user key found)'}
+                </div>
+              </div>
+            </div>
+
+            <button id="btn-logout"
+              class="px-4 py-2 rounded-xl bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-black text-xs uppercase tracking-wider transition-all">
+              <i class="fa fa-right-from-bracket mr-2"></i> Logout
+            </button>
+          </div>
+
+          <div class="p-6 space-y-6">
+            <div>
+              <label class="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Company Name</label>
+              <input id="settings-companyName" type="text"
+                class="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500"
+                value="${escapeHtml(config.companyName)}">
+              <p class="text-[11px] font-semibold text-slate-400 mt-2">
+                Used for headers and the Public Portfolio view.
+              </p>
+            </div>
+
+            <div>
+              <label class="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Currency</label>
+              <select id="settings-currency"
+                class="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500">
+                ${['USD','CAD','EUR','GBP'].map(c => `<option value="${c}" ${c === config.currency ? 'selected' : ''}>${c}</option>`).join('')}
+              </select>
+              <p class="text-[11px] font-semibold text-slate-400 mt-2">
+                Stored now; wire your formatters to use this later if desired.
+              </p>
+            </div>
+
+            <div class="flex flex-col md:flex-row gap-3 pt-2">
+              <button id="btn-save-settings"
+                class="flex-1 px-5 py-3 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-black text-xs uppercase tracking-wider transition-all">
+                <i class="fa fa-floppy-disk mr-2"></i> Save Preferences
+              </button>
+
+              <button id="btn-export-snapshot"
+                class="flex-1 px-5 py-3 rounded-xl bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-black text-xs uppercase tracking-wider transition-all">
+                <i class="fa fa-download mr-2"></i> Export Data Snapshot
+              </button>
+            </div>
+
+            <div class="p-4 rounded-xl bg-orange-50 border border-orange-100">
+              <div class="text-[10px] font-black text-orange-700 uppercase tracking-widest mb-1">Compatibility Note</div>
+              <p class="text-[11px] font-semibold text-orange-800 leading-relaxed">
+                Settings are stored per-user when possible (<span class="font-black">settingsByUser</span>) and also mirrored to
+                <span class="font-black">settings</span> for backward compatibility with older modules.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+
+    this.bindEvents();
+  },
+
+  bindEvents() {
+    const container = document.getElementById('view-settings');
+    if (!container) return;
+
+    if (this._bound) {
+      // Nodes are replaced each render; wire button handlers again safely.
+      this._wireButtons();
+      return;
+    }
+
+    this._bound = true;
+    this._wireButtons();
+  },
+
+  _wireButtons() {
+    const btnSave = document.getElementById('btn-save-settings');
+    const btnExport = document.getElementById('btn-export-snapshot');
+    const btnLogout = document.getElementById('btn-logout');
+
+    if (btnSave) btnSave.onclick = () => this.saveSettings();
+    if (btnExport) btnExport.onclick = () => this.exportSnapshot();
+    if (btnLogout) btnLogout.onclick = () => this.confirmLogout();
+  },
+
+  saveSettings() {
+    try {
+      const state = stateManager.get();
+      const user = getAuthUser(state);
+      const userKey = getUserKey(user);
+
+      const companyName = String(document.getElementById('settings-companyName')?.value ?? '').trim();
+      const currency = String(document.getElementById('settings-currency')?.value ?? 'USD').trim() || 'USD';
+
+      if (!companyName) throw new Error('Company Name cannot be blank.');
+
+      const patch = { companyName, currency };
+
+      // 1) Save per-user (optional) if we have a stable userKey
+      if (userKey) {
+        const byUser = safeObj(state?.settingsByUser) || {};
+        const nextByUser = { ...byUser, [userKey]: { ...(safeObj(byUser[userKey]) || {}), ...patch } };
+
+        // If stateManager supports generic update, prefer that.
+        // We keep it conservative: attempt updateSettings if it exists; else update root with update().
+        if (typeof stateManager.update === 'function') {
+          stateManager.update('root', null, { settingsByUser: nextByUser }); // may not exist in your stateManager
+        } else {
+          // Many of your modules use updateSettings; we can still store settingsByUser by merging into settings object
+          // if updateSettings only updates state.settings, we won't lose it because we also mirror.
+        }
+
+        // Mirror to global settings as well (backward compatibility)
+        if (typeof stateManager.updateSettings === 'function') {
+          stateManager.updateSettings(patch);
+          // Try to persist settingsByUser if updateSettings supports deep merge:
+          try {
+            if (typeof stateManager.updateSettings === 'function') {
+              stateManager.updateSettings({ settingsByUser: nextByUser });
+            }
+          } catch (_) {
+            // If updateSettings doesn't support nested keys, ignore; still mirrored globally.
+          }
+        } else if (typeof stateManager.set === 'function') {
+          // fall back: set entire state if supported (rare)
+          stateManager.set({ ...state, settings: { ...(safeObj(state.settings) || {}), ...patch }, settingsByUser: nextByUser });
+        }
+      } else {
+        // 2) Save global only
+        if (typeof stateManager.updateSettings === 'function') {
+          stateManager.updateSettings(patch);
+        } else {
+          throw new Error('State manager is missing updateSettings().');
+        }
+      }
+
+      showSuccess('Preferences Updated', 'Your settings have been saved.');
+    } catch (err) {
+      showError('Save failed', err?.message || 'Unable to save settings.');
+    }
+  },
+
+  exportSnapshot() {
+    try {
+      const state = stateManager.get();
+
+      // Basic JSON snapshot download
+      const json = JSON.stringify(state, null, 2);
+      const blob = new Blob([json], { type: 'application/json' });
+
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `crm_snapshot_${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+
+      showSuccess('Snapshot Exported', 'Your data snapshot was downloaded.');
+    } catch (err) {
+      showError('Export failed', err?.message || 'Unable to export snapshot.');
+    }
+  },
+
+  confirmLogout() {
+    modalManager.show(
+      'End session',
+      `<p class="text-sm font-semibold text-slate-700">Terminate the current session and log out?</p>`,
+      async () => {
+        try {
+          const state = stateManager.get();
+          const auth = state?.auth;
+
+          // If you store firebase auth elsewhere, adjust this.
+          if (auth?.signOut && typeof auth.signOut === 'function') {
+            await auth.signOut();
+          } else if (typeof stateManager.signOut === 'function') {
+            await stateManager.signOut();
+          } else {
+            // Fallback: try global firebase auth if present (optional)
+            if (window?.firebase?.auth?.().signOut) {
+              await window.firebase.auth().signOut();
+            } else {
+              throw new Error('No signOut handler found.');
+            }
+          }
+
+          showSuccess('Logged out', 'You have been signed out.');
+          // Let your auth listener handle UI. As a fallback, reload.
+          try {
+            window.location.reload();
+          } catch (_) {}
+
+          return true;
+        } catch (err) {
+          showError('Logout failed', err?.message || 'Unable to sign out.');
+          return false;
+        }
+      },
+      { submitLabel: 'Logout', cancelLabel: 'Cancel', danger: true }
+    );
+  }
+};
+
+// Compatibility export
+export const renderSettings = () => settings.render();

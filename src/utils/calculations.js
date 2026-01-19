@@ -3,64 +3,78 @@
  * Centralized financial engine for Real Estate metrics.
  */
 
+function num(v) {
+  const n = parseFloat(v);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function roundTo(n, decimals) {
+  const x = Number(n);
+  if (!Number.isFinite(x)) return 0;
+  const p = 10 ** decimals;
+  return Math.round(x * p) / p;
+}
+
 export const calc = {
-    /**
-     * Total Project Cost (Basis)
-     */
-    totalBasis(purchasePrice, closingCosts, rehabBudget) {
-        return (parseFloat(purchasePrice) || 0) + 
-               (parseFloat(closingCosts) || 0) + 
-               (parseFloat(rehabBudget) || 0);
-    },
+  /**
+   * Total Project Cost (Basis)
+   */
+  totalBasis(purchasePrice, closingCosts, rehabBudget) {
+    return num(purchasePrice) + num(closingCosts) + num(rehabBudget);
+  },
 
-    /**
-     * Cap Rate = (NOI / Purchase Price) * 100
-     */
-    capRate(noi, price) {
-        if (!price || price <= 0) return 0;
-        return ((noi / price) * 100).toFixed(2);
-    },
+  /**
+   * Cap Rate = (NOI / Purchase Price) * 100
+   */
+  capRate(noi, price) {
+    const p = num(price);
+    if (p <= 0) return 0;
+    return roundTo((num(noi) / p) * 100, 2);
+  },
 
-    /**
-     * Yield on Cost = (Projected NOI / Total Project Cost) * 100
-     * Crucial for value-add deals to see the "spread" over market cap rates.
-     */
-    yieldOnCost(projectedNoi, totalBasis) {
-        if (!totalBasis || totalBasis <= 0) return 0;
-        return ((projectedNoi / totalBasis) * 100).toFixed(2);
-    },
+  /**
+   * Yield on Cost = (Projected NOI / Total Project Cost) * 100
+   */
+  yieldOnCost(projectedNoi, totalBasis) {
+    const b = num(totalBasis);
+    if (b <= 0) return 0;
+    return roundTo((num(projectedNoi) / b) * 100, 2);
+  },
 
-    /**
-     * Debt Service Coverage Ratio (DSCR)
-     * Used by lenders to assess risk.
-     */
-    dscr(noi, annualDebtService) {
-        if (!annualDebtService || annualDebtService <= 0) return 0;
-        return (noi / annualDebtService).toFixed(2);
-    },
+  /**
+   * Debt Service Coverage Ratio (DSCR)
+   */
+  dscr(noi, annualDebtService) {
+    const ds = num(annualDebtService);
+    if (ds <= 0) return 0;
+    return roundTo(num(noi) / ds, 2);
+  },
 
-    /**
-     * Loan to Value (LTV)
-     */
-    ltv(loanAmount, valuation) {
-        if (!valuation || valuation <= 0) return 0;
-        return ((loanAmount / valuation) * 100).toFixed(1);
-    },
+  /**
+   * Loan to Value (LTV)
+   */
+  ltv(loanAmount, valuation) {
+    const v = num(valuation);
+    if (v <= 0) return 0;
+    return roundTo((num(loanAmount) / v) * 100, 1);
+  },
 
-    /**
-     * Cash-on-Cash Return
-     * (Annual Pre-Tax Cash Flow / Total Equity Invested)
-     */
-    cashOnCash(cashFlow, equity) {
-        if (!equity || equity <= 0) return 0;
-        return ((cashFlow / equity) * 100).toFixed(2);
-    },
+  /**
+   * Cash-on-Cash Return
+   * (Annual Pre-Tax Cash Flow / Total Equity Invested)
+   */
+  cashOnCash(cashFlow, equity) {
+    const e = num(equity);
+    if (e <= 0) return 0;
+    return roundTo((num(cashFlow) / e) * 100, 2);
+  },
 
-    /**
-     * Per Unit Metrics
-     */
-    pricePerUnit(price, units) {
-        if (!units || units <= 0) return 0;
-        return Math.round(price / units);
-    }
+  /**
+   * Per Unit Metrics
+   */
+  pricePerUnit(price, units) {
+    const u = num(units);
+    if (u <= 0) return 0;
+    return Math.round(num(price) / u);
+  }
 };
