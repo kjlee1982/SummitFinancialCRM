@@ -12,7 +12,11 @@ import { dashboard } from './modules/dashboard.js';
 import { analytics } from './modules/analytics.js';
 import { settingsModule } from './modules/settings.js';
 import { vault } from './modules/vault.js';
-import { publicPortfolio } from './modules/publicPortfolio.js';
+
+// NOTE: GitHub Pages is case-sensitive. Ensure this matches the actual filename in /src/modules.
+// Your screenshot shows `publicportfolio.js` (lowercase p), so import must match exactly:
+import { publicPortfolio } from './modules/publicportfolio.js';
+
 import { investorPortal } from './modules/investorPortal.js';
 import { renderDeals, showAddDealModal } from './modules/deals.js';
 import { renderProperties, showAddPropertyModal } from './modules/properties.js';
@@ -23,68 +27,13 @@ import { renderTasks, showAddTaskModal } from './modules/tasks.js';
 import { renderLLCs, showAddLLCModal } from './modules/llcs.js';
 
 /**
- * Sidebar Controller (mobile drawer)
- */
-let sidebarOpen = false;
-
-function isDesktop() {
-  return window.matchMedia('(min-width: 768px)').matches;
-}
-
-function setSidebar(open) {
-  const sidebar = document.getElementById('sidebar');
-  const backdrop = document.getElementById('sidebarBackdrop');
-  if (!sidebar || !backdrop) return;
-
-  // On desktop, sidebar should always be visible and backdrop hidden
-  if (isDesktop()) {
-    sidebar.classList.remove('-translate-x-full');
-    sidebar.classList.add('translate-x-0');
-    backdrop.classList.add('hidden');
-    sidebarOpen = false;
-    return;
-  }
-
-  sidebarOpen = !!open;
-
-  if (sidebarOpen) {
-    sidebar.classList.remove('-translate-x-full');
-    sidebar.classList.add('translate-x-0');
-    backdrop.classList.remove('hidden');
-  } else {
-    sidebar.classList.add('-translate-x-full');
-    sidebar.classList.remove('translate-x-0');
-    backdrop.classList.add('hidden');
-  }
-}
-
-function initSidebarUI() {
-  const toggleBtn = document.getElementById('sidebarToggle');
-  const backdrop = document.getElementById('sidebarBackdrop');
-
-  // Start closed on mobile; always visible on desktop
-  setSidebar(false);
-
-  toggleBtn?.addEventListener('click', () => setSidebar(!sidebarOpen));
-  backdrop?.addEventListener('click', () => setSidebar(false));
-
-  window.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') setSidebar(false);
-  });
-
-  // Keep sidebar state sane when resizing across breakpoint
-  window.addEventListener('resize', () => {
-    // Re-apply rules for current breakpoint
-    setSidebar(sidebarOpen);
-  });
-}
-
-/**
  * 1. INITIALIZATION
  */
 authModule.init();
 router.init();
-initSidebarUI();
+
+// Mobile sidebar toggle/backdrop behavior (index.html uses #sidebarToggle + #sidebarBackdrop)
+bindSidebarControls();
 
 // Watch for state changes and re-render
 stateManager.subscribe((newState) => {
@@ -105,9 +54,7 @@ document.addEventListener('click', async (e) => {
   // Handle Navigation
   if (action === 'nav-link') {
     router.navigate(target.dataset.view);
-
-    // Auto-close mobile drawer after navigating
-    setSidebar(false);
+    closeSidebar(); // Auto-close mobile menu
     return;
   }
 
@@ -123,8 +70,8 @@ document.addEventListener('click', async (e) => {
     case 'llc-add': showAddLLCModal(); break;
 
     case 'task-toggle': {
-      const task = (state.tasks || []).find(t => t.id === id);
-      if (!task) break;
+      const task = state.tasks.find(t => t.id === id);
+      if (!task) return;
       stateManager.update('tasks', id, { completed: !task.completed });
       break;
     }
@@ -150,6 +97,84 @@ document.addEventListener('click', async (e) => {
       break;
   }
 });
+
+/**
+ * Mobile sidebar helpers
+ */
+let _sidebarBound = false;
+function bindSidebarControls() {
+  if (_sidebarBound) return;
+  _sidebarBound = true;
+
+  const toggleBtn = document.getElementById('sidebarToggle');
+  const backdrop = document.getElementById('sidebarBackdrop');
+
+  toggleBtn?.addEventListener('click', (e) => {
+    e.preventDefault();
+    toggleSidebar();
+  });
+
+  backdrop?.addEventListener('click', (e) => {
+    e.preventDefault();
+    closeSidebar();
+  });
+
+  // ESC closes on mobile
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') closeSidebar();
+  });
+
+  // If user resizes to desktop, ensure sidebar is visible and backdrop hidden
+  window.addEventListener('resize', () => {
+    if (window.innerWidth >= 768) {
+      openSidebar(true);
+    } else {
+      // On mobile default to closed on resize to small
+      closeSidebar(true);
+    }
+  });
+
+  // Initial state: desktop open, mobile closed
+  if (window.innerWidth >= 768) openSidebar(true);
+  else closeSidebar(true);
+}
+
+function openSidebar(silent = false) {
+  const sidebar = document.getElementById('sidebar');
+  const backdrop = document.getElementById('sidebarBackdrop');
+
+  sidebar?.classList.remove('-translate-x-full');
+
+  // Backdrop only used on mobile
+  if (window.innerWidth < 768) backdrop?.classList.remove('hidden');
+  else backdrop?.classList.add('hidden');
+
+  if (!silent) sidebar?.setAttribute('aria-expanded', 'true');
+}
+
+function closeSidebar(silent = false) {
+  const sidebar = document.getElementById('sidebar');
+  const backdrop = document.getElementById('sidebarBackdrop');
+
+  if (window.innerWidth < 768) {
+    sidebar?.classList.add('-translate-x-full');
+    backdrop?.classList.add('hidden');
+  } else {
+    // On desktop we don't auto-collapse
+    sidebar?.classList.remove('-translate-x-full');
+    backdrop?.classList.add('hidden');
+  }
+
+  if (!silent) sidebar?.setAttribute('aria-expanded', 'false');
+}
+
+function toggleSidebar() {
+  const sidebar = document.getElementById('sidebar');
+  if (!sidebar) return;
+
+  if (sidebar.classList.contains('-translate-x-full')) openSidebar();
+  else closeSidebar();
+}
 
 /**
  * 3. VIEW RENDERING ENGINE
