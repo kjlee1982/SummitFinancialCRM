@@ -6,7 +6,7 @@
   <title>Summit CRM | Asset Management</title>
 
   <!-- Tailwind (compiled output) -->
-  <link href="./dist/output.css?v=20260119a" rel="stylesheet" />
+  <link href="./dist/output.css?v=20260119b" rel="stylesheet" />
 
   <!-- Chart.js -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -29,9 +29,9 @@
   <!-- Auth overlay -->
   <div id="auth-overlay" class="fixed inset-0 z-[100] bg-slate-900 flex items-center justify-center hidden"></div>
 
-  <!-- Global modal -->
-  <div id="modal-backdrop" class="fixed inset-0 z-[80] bg-slate-900/60 backdrop-blur-sm hidden flex items-center justify-center p-4">
-    <div id="modal-content" class="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden transform transition-all"></div>
+  <!-- Global modal (FIXED IDS for modalManager compatibility) -->
+  <div id="modalBackdrop" class="fixed inset-0 z-[80] bg-slate-900/60 backdrop-blur-sm hidden flex items-center justify-center p-4">
+    <div id="modalContent" class="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden transform transition-all"></div>
   </div>
 
   <div class="flex h-screen overflow-hidden relative">
@@ -167,6 +167,6 @@
   </div>
 
   <!-- Load app ONCE -->
-  <script type="module" src="./src/main.js?v=20260119a"></script>
+  <script type="module" src="./src/main.js?v=20260119b"></script>
 </body>
 </html>
