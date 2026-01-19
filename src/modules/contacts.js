@@ -555,3 +555,4 @@ export const contacts = {
     return 'bg-gray-50 text-gray-500';
   }
 };
+export const showAddContactModal = () => contacts.showAddContactModal();
