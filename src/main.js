@@ -3,9 +3,6 @@
  * The Central Command: Links all modules and orchestrates the user experience.
  */
 
-// Side-effect import: ensures Firebase initializes even if we don't reference exports here.
-import './firebase.js';
-
 import { stateManager } from './state.js';
 import { router } from './router.js';
 import { authModule } from './modules/auth.js';
@@ -15,72 +12,39 @@ import { dashboard } from './modules/dashboard.js';
 import { analytics } from './modules/analytics.js';
 import { settingsModule } from './modules/settings.js';
 import { vault } from './modules/vault.js';
-import { publicPortfolio } from './modules/publicportfolio.js';
+import { publicPortfolio } from './modules/publicPortfolio.js';
 import { investorPortal } from './modules/investorPortal.js';
-import { deals } from './modules/deals.js';
-import { properties } from './modules/properties.js';
-import { projects } from './modules/projects.js';
-import { investors } from './modules/investors.js';
-import { contacts } from './modules/contacts.js';
-import { tasks } from './modules/tasks.js';
-import { llcs } from './modules/llcs.js';
 
-import { activity } from './modules/activity.js';
-import { calendar } from './modules/calendar.js';
-import { dealAnalyzer } from './modules/deal-analyzer.js';
-import { equityWaterfall } from './modules/equity-waterfall.js';
-import { marketAnalysis } from './modules/market-analysis.js';
-import { uploadManager as uploads } from './modules/uploads.js';
+import { renderDeals, showAddDealModal } from './modules/deals.js';
+import { renderProperties, showAddPropertyModal } from './modules/properties.js';
+import { renderProjects, showAddProjectModal } from './modules/projects.js';
+import { renderInvestors, showAddInvestorModal } from './modules/investors.js';
+import { renderContacts, showAddContactModal } from './modules/contacts.js';
+import { renderTasks, showAddTaskModal } from './modules/tasks.js';
+import { renderLLCs, showAddLLCModal } from './modules/llcs.js';
 
 /**
- * Helper: safely call handlers so missing exports don’t break event delegation.
+ * Sidebar manager (mobile drawer)
+ * - solid (no transparency)
+ * - backdrop click-away
+ * - Esc to close
+ * - close on nav click (mobile)
  */
-function safeCall(fn, label) {
-  if (typeof fn !== 'function') {
-    console.warn(`Missing handler: ${label}`);
-    return;
-  }
-  try {
-    fn();
-  } catch (e) {
-    console.error(`Handler failed: ${label}`, e);
-  }
-}
+function bindSidebarOnce() {
+  const sidebar = document.getElementById('sidebar');
+  const backdrop = document.getElementById('sidebarBackdrop');
+  const toggleBtn = document.getElementById('sidebarToggle');
 
-/**
- * Sidebar (mobile drawer) controller
- * - Desktop: sidebar always visible (md:translate-x-0), backdrop always hidden
- * - Mobile: sidebar uses translate classes + backdrop for click-away
- */
-const sidebarUI = (() => {
+  if (!sidebar || !backdrop) return;
+
+  // Prevent double-binding if hot-reloaded or included twice
+  if (sidebar.dataset.bound === '1') return;
+  sidebar.dataset.bound = '1';
+
   let open = false;
 
-  const isMobile = () => window.innerWidth < 768;
-
-  const getEls = () => ({
-    sidebar: document.getElementById('sidebar'),
-    backdrop: document.getElementById('sidebarBackdrop'),
-    toggle: document.getElementById('sidebarToggle'),
-  });
-
-  function apply(openWanted) {
-    const { sidebar, backdrop } = getEls();
-    if (!sidebar || !backdrop) return;
-
-    // Desktop: never show backdrop, let md:translate-x-0 rule win
-    if (!isMobile()) {
-      open = false;
-      backdrop.classList.add('hidden');
-      // Remove any mobile "forced open" class so md:translate-x-0 governs
-      sidebar.classList.remove('translate-x-0');
-      // Keep -translate-x-full present; md:translate-x-0 overrides at desktop
-      if (!sidebar.classList.contains('-translate-x-full')) {
-        sidebar.classList.add('-translate-x-full');
-      }
-      return;
-    }
-
-    open = !!openWanted;
+  const setSidebar = (nextOpen) => {
+    open = !!nextOpen;
 
     if (open) {
       sidebar.classList.remove('-translate-x-full');
@@ -91,49 +55,49 @@ const sidebarUI = (() => {
       sidebar.classList.remove('translate-x-0');
       backdrop.classList.add('hidden');
     }
-  }
+  };
 
-  function toggle() {
-    apply(!open);
-  }
+  const isDesktop = () => window.innerWidth >= 768;
 
-  function closeIfMobile() {
-    if (isMobile()) apply(false);
-  }
+  // Initial state: closed on mobile; on desktop md:translate-x-0 handles it
+  setSidebar(false);
 
-  function bindOnce() {
-    const { toggle: btn, backdrop } = getEls();
+  toggleBtn?.addEventListener('click', () => {
+    if (isDesktop()) return; // desktop always visible via md:translate-x-0
+    setSidebar(!open);
+  });
 
-    // Ensure consistent initial state after DOM is ready
-    apply(false);
+  backdrop.addEventListener('click', () => setSidebar(false));
 
-    btn?.addEventListener('click', () => toggle());
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') setSidebar(false);
+  });
 
-    backdrop?.addEventListener('click', () => apply(false));
+  // If resizing to desktop, ensure backdrop isn't stuck
+  window.addEventListener('resize', () => {
+    if (isDesktop()) {
+      backdrop.classList.add('hidden');
+      // Let md:translate-x-0 control visibility; remove forced translate class
+      sidebar.classList.remove('translate-x-0');
+      sidebar.classList.remove('-translate-x-full');
+    } else {
+      // On mobile, default closed
+      setSidebar(false);
+    }
+  });
 
-    window.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') apply(false);
-    });
-
-    window.addEventListener('resize', () => {
-      // Keep state sane across rotations/resizes
-      apply(open);
-    });
-  }
-
-  return { bindOnce, closeIfMobile, apply };
-})();
+  // Expose a safe close helper for navigation clicks
+  window.__closeSidebarMobile = () => {
+    if (!isDesktop()) setSidebar(false);
+  };
+}
 
 /**
  * 1. INITIALIZATION
  */
 authModule.init();
 router.init();
-
-// Bind sidebar behavior once (safe even if called early)
-document.addEventListener('DOMContentLoaded', () => {
-  sidebarUI.bindOnce();
-});
+bindSidebarOnce();
 
 // Watch for state changes and re-render
 stateManager.subscribe((newState) => {
@@ -154,75 +118,45 @@ document.addEventListener('click', async (e) => {
   // Handle Navigation
   if (action === 'nav-link') {
     router.navigate(target.dataset.view);
-    // Close drawer only on mobile (desktop stays visible)
-    sidebarUI.closeIfMobile();
+    // Close the drawer on mobile after navigation
+    window.__closeSidebarMobile?.();
     return;
   }
 
   // Handle Data Actions
   switch (action) {
-    // ---- ADD MODALS (safe-called to avoid regressions) ----
-    case 'deal-add':
-      safeCall(deals.showAddDealModal, 'deals.showAddDealModal');
-      break;
-    case 'property-add':
-      safeCall(properties.showAddPropertyModal, 'properties.showAddPropertyModal');
-      break;
-    case 'project-add':
-      safeCall(projects.showAddProjectModal, 'projects.showAddProjectModal');
-      break;
-    case 'investor-add':
-      safeCall(investors.showAddInvestorModal, 'investors.showAddInvestorModal');
-      break;
-    case 'task-add':
-      safeCall(tasks.showAddTaskModal, 'tasks.showAddTaskModal');
-      break;
-    case 'contact-add':
-      safeCall(contacts.showAddContactModal, 'contacts.showAddContactModal');
-      break;
-    case 'llc-add':
-      safeCall(llcs.showAddLLCModal, 'llcs.showAddLLCModal');
-      break;
-    case 'vault-add':
-      safeCall(vault.showAddModal, 'vault.showAddModal');
-      break;
+    case 'deal-add': showAddDealModal(); break;
+    case 'property-add': showAddPropertyModal(); break;
+    case 'project-add': showAddProjectModal(); break;
+    case 'investor-add': showAddInvestorModal(); break;
+    case 'task-add': showAddTaskModal(); break;
+    case 'contact-add': showAddContactModal(); break;
+    case 'vault-add': vault.showAddModal(); break;
+    case 'llc-add': showAddLLCModal(); break;
 
-    // ---- QUICK TOGGLES / SIMPLE ACTIONS ----
     case 'task-toggle': {
-      const task = state.tasks?.find(t => t.id === id);
-      if (!task) {
-        console.warn('task-toggle: task not found', { id });
-        return;
-      }
+      const task = Array.isArray(state.tasks) ? state.tasks.find(t => t.id === id) : null;
+      if (!task) return;
       stateManager.update('tasks', id, { completed: !task.completed });
       break;
     }
 
-    // ---- DELETES (confirm + delete) ----
+    // Existing confirms kept as-is (you can migrate to modalManager later)
     case 'prop-delete':
-      if (confirm("Permanently delete this asset?")) stateManager.delete('properties', id);
+      if (confirm('Permanently delete this asset?')) stateManager.delete('properties', id);
       break;
-
     case 'project-delete':
-      if (confirm("Remove this project?")) stateManager.delete('projects', id);
+      if (confirm('Remove this project?')) stateManager.delete('projects', id);
       break;
-
     case 'investor-delete':
-      if (confirm("Remove investor record?")) stateManager.delete('investors', id);
+      if (confirm('Remove investor record?')) stateManager.delete('investors', id);
       break;
-
     case 'vault-delete':
-      if (confirm("Unlink document?")) stateManager.delete('vault', id);
+      if (confirm('Unlink document?')) stateManager.delete('vault', id);
       break;
 
-    // ---- AUTH ----
     case 'logout':
       authModule.logout();
-      break;
-
-    default:
-      // Don’t fail silently—this helps catch missing wiring quickly.
-      console.warn('Unhandled action:', action, 'target:', target);
       break;
   }
 });
@@ -231,41 +165,29 @@ document.addEventListener('click', async (e) => {
  * 3. VIEW RENDERING ENGINE
  */
 function refreshCurrentView(view, state) {
+  // Reset scroll position
   const wrapper = document.getElementById('view-container-wrapper');
   if (wrapper) wrapper.scrollTop = 0;
 
   switch (view) {
-    case 'dashboard':         dashboard.render(); break;
-    case 'analytics':         analytics.render(); break;
-
-    case 'deals':             deals.render(state); break;
-    case 'properties':        properties.render(state); break;
-    case 'projects':          projects.render(state); break;
-    case 'investors':         investors.render(state); break;
-    case 'contacts':          contacts.render(state); break;
-    case 'tasks':             tasks.render(state); break;
-    case 'llcs':              llcs.render(state); break;
-
-    case 'activity':          activity.render(state); break;
-    case 'calendar':          calendar.render(state); break;
-
-    case 'deal-analyzer':     dealAnalyzer.render(state); break;
-    case 'equity-waterfall':  equityWaterfall.render(state); break;
-    case 'market-analysis':   marketAnalysis.render(state); break;
-
-    case 'uploads':           uploads.render(state); break;
-
-    case 'investor-portal':   investorPortal.render(); break;
-    case 'public-portfolio':  publicPortfolio.render(); break;
-    case 'vault':             vault.render(); break;
-    case 'settings':          settingsModule.render(); break;
-
-    default:
-      dashboard.render();
-      break;
+    case 'dashboard':        dashboard.render(); break;
+    case 'analytics':        analytics.render(); break;
+    case 'deals':            renderDeals(state.deals); break;
+    case 'properties':       renderProperties(state.properties); break;
+    case 'projects':         renderProjects(state.projects); break;
+    case 'investors':        renderInvestors(state.investors); break;
+    case 'contacts':         renderContacts(state.contacts); break;
+    case 'investor-portal':  investorPortal.render(); break;
+    case 'public-portfolio': publicPortfolio.render(); break;
+    case 'vault':            vault.render(); break;
+    case 'tasks':            renderTasks(state.tasks); break;
+    case 'llcs':             renderLLCs(state.llcs); break;
+    case 'settings':         settingsModule.render(); break;
+    default:                 dashboard.render();
   }
 }
 
+// Trigger refresh when the URL hash changes via the router
 window.addEventListener('view-changed', (e) => {
   refreshCurrentView(e.detail.view, stateManager.get());
 });
