@@ -1,53 +1,46 @@
 <!DOCTYPE html>
-<html lang="en" class="h-full">
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Summit CRM</title>
+  <title>Summit CRM | Asset Management</title>
 
-  <!-- Compiled Tailwind output (cache-busted to defeat GitHub Pages caching). -->
-  <!-- Compiled Tailwind output (recommended) -->
-  <!-- If output.css is missing/not published, we fall back to Tailwind Browser CDN so the app isn't unstyled. -->
-  <link
-    id="twcss"
-    href="./dist/output.css?v=20260119"
-    rel="stylesheet"
-    onerror="(function(){try{if(window.__twFallbackLoaded)return;window.__twFallbackLoaded=true;var s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4';s.onload=function(){console.warn('[SummitCRM] Tailwind fallback loaded (output.css missing)');};document.head.appendChild(s);}catch(e){}})()"
-  />
-
-  <!-- Font Awesome + Inter -->
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+  <!-- Compiled Tailwind output (GitHub Pages-safe relative path) -->
+  <link href="./dist/output.css?v=1" rel="stylesheet" />
 
   <!-- Chart.js -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
+  <!-- Icons + Fonts -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+
+  <!-- Optional favicon (won’t break if missing) -->
+  <link rel="icon" type="image/svg+xml" href="./favicon.svg">
+
   <style>
     body { font-family: 'Inter', sans-serif; }
-    .view-container { animation: fadeIn 0.2s ease-in-out; }
+    .view-container { animation: fadeIn 0.18s ease-in-out; }
     @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
     .no-scrollbar::-webkit-scrollbar { display: none; }
     .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-
-    /*
-      Safety fallback: if Tailwind build ever misses translate utilities,
-      this keeps the mobile sidebar usable.
-    */
-    .-translate-x-full { transform: translateX(-100%) !important; }
-    .translate-x-0 { transform: translateX(0) !important; }
   </style>
 </head>
 
-<body class="h-full bg-slate-50 text-slate-900 overflow-hidden">
-  <div id="appShell" class="flex h-screen relative">
+<body class="bg-slate-50 text-slate-900 overflow-hidden">
+  <!-- Modal Manager Root (used by modals.js) -->
+  <div id="modal-backdrop" class="fixed inset-0 z-[80] bg-slate-900/60 backdrop-blur-sm hidden flex items-center justify-center p-4">
+    <div id="modal-content" class="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden transform transition-all"></div>
+  </div>
 
-    <!-- Backdrop (mobile only) -->
+  <div class="min-h-screen flex">
+    <!-- Mobile backdrop -->
     <div id="sidebarBackdrop" class="fixed inset-0 bg-black/40 z-40 hidden md:hidden"></div>
 
     <!-- Sidebar -->
     <aside id="sidebar"
-      class="w-64 bg-slate-900 text-slate-400 flex-shrink-0 flex flex-col transition-transform duration-300
-             -translate-x-full md:translate-x-0 fixed md:relative z-50 h-full border-r border-slate-800">
+      class="w-64 bg-slate-900 text-slate-400 flex-shrink-0 flex flex-col transform transition-transform duration-300 -translate-x-full md:translate-x-0 fixed md:relative z-50 h-full border-r border-slate-800">
+
       <div class="p-6 flex-grow overflow-y-auto no-scrollbar">
         <div class="flex items-center gap-3 text-white mb-8">
           <div class="w-8 h-8 bg-orange-600 rounded-lg flex items-center justify-center shadow-lg shadow-orange-900/20">
@@ -77,7 +70,7 @@
           </button>
 
           <p class="text-[10px] font-black uppercase tracking-widest text-slate-500 mt-8 mb-3 px-3">Client Relations</p>
-          <button data-action="nav-link" data-view="investor-portal" class="w-full flex items-center px-4 py-2.5 rounded-xl text-sm font-bold transition-all hover:text-white hover:bg-slate-800 text-orange-400">
+          <button data-action="nav-link" data-view="investor-portal" class="w-full flex items-center px-4 py-2.5 rounded-xl text-sm font-bold transition-all hover:text-white hover:bg-slate-800">
             <i class="fa fa-user-shield w-6"></i>Investor Portal
           </button>
           <button data-action="nav-link" data-view="investors" class="w-full flex items-center px-4 py-2.5 rounded-xl text-sm font-bold transition-all hover:text-white hover:bg-slate-800">
@@ -134,17 +127,16 @@
     </aside>
 
     <!-- Main -->
-    <main class="flex-grow flex flex-col min-w-0">
+    <main class="flex-1 flex flex-col min-w-0">
       <!-- Mobile header -->
       <header class="md:hidden bg-white border-b border-slate-200 p-4 flex items-center justify-between z-40">
         <span class="font-black text-slate-900 tracking-tighter uppercase">Summit<span class="text-orange-600">CRM</span></span>
-        <button id="sidebarToggle" class="w-10 h-10 flex items-center justify-center rounded-lg bg-slate-100 text-slate-600">
+        <button data-action="toggle-sidebar" class="w-10 h-10 flex items-center justify-center rounded-lg bg-slate-100 text-slate-600">
           <i class="fa fa-bars text-lg"></i>
         </button>
       </header>
 
-      <!-- Views wrapper -->
-      <div id="view-container-wrapper" class="flex-grow overflow-y-auto no-scrollbar bg-slate-50">
+      <div id="view-container-wrapper" class="flex-1 overflow-y-auto no-scrollbar bg-slate-50">
         <div id="view-dashboard" class="view-container hidden"></div>
         <div id="view-analytics" class="view-container hidden"></div>
 
@@ -173,7 +165,7 @@
     </main>
   </div>
 
-  <!-- Entry -->
-  <script type="module" src="./src/main.js?v=20260119"></script>
+  <!-- App entry (ONLY ONCE) -->
+  <script type="module" src="./src/main.js?v=1"></script>
 </body>
 </html>
