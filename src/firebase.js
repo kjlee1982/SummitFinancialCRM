@@ -24,7 +24,7 @@ const app = initializeApp(firebaseConfig);
 
 // Export instances to be used by other modules
 export const auth = getAuth(app);
-export const db = getFirestore(app, "summitcrm");
+export const db = getFirestore(app, "crm");
 export const storage = getStorage(app);
 
 /**
