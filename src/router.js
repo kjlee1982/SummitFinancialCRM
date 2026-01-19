@@ -29,10 +29,19 @@ const views = [
 
 let currentView = 'dashboard';
 
+// Prevent duplicate renders: navigate() sets location.hash which triggers hashchange.
+// We'll ignore the next hashchange when it was initiated by navigate().
+let ignoreNextHashChange = false;
+
 export const router = {
   init() {
     // Handle hash navigation (back/forward + manual edits)
     window.addEventListener('hashchange', () => {
+      if (ignoreNextHashChange) {
+        ignoreNextHashChange = false;
+        return;
+      }
+
       const hash = window.location.hash.replace('#', '');
       if (views.includes(hash)) {
         this.navigate(hash, false);
@@ -56,6 +65,7 @@ export const router = {
 
     // Update URL hash (only when user clicked a nav item)
     if (pushState) {
+      ignoreNextHashChange = true;
       window.location.hash = view;
     }
 
