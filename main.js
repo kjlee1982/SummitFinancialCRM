@@ -201,3 +201,8 @@ function refreshCurrentView(view) {
 window.addEventListener('view-changed', (e) => {
   refreshCurrentView(e.detail.view, stateManager.get());
 });
+
+// Debug helpers (safe to leave in; remove later if you want)
+window.getState = () => stateManager.get();
+window.refreshCurrentView = (view = router.getCurrentView()) =>
+  refreshCurrentView(view, stateManager.get());
