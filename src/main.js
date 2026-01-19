@@ -140,7 +140,26 @@ function refreshCurrentView(view, state) {
     case 'contacts': contacts.render(); break;
     case 'public-portfolio': publicPortfolio.render(); break;
 
-    case 'deal-analyzer': dealAnalyzer.render(); break;
+    case 'deal-analyzer': {
+      // Defensive: avoid hard-crashing the whole app if a module export regresses.
+      if (dealAnalyzer && typeof dealAnalyzer.render === 'function') {
+        dealAnalyzer.render(state);
+      } else {
+        console.error('Deal Analyzer module is missing render(). Verify src/modules/deal-analyzer.js exports dealAnalyzer with a render() method.', dealAnalyzer);
+        const host = document.getElementById('view-deal-analyzer');
+        if (host) {
+          host.innerHTML = `
+            <div class="p-6 max-w-5xl mx-auto">
+              <div class="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
+                <h2 class="text-xl font-black text-slate-900 italic tracking-tight">Deal Analyzer</h2>
+                <p class="text-sm text-slate-500 font-semibold mt-1">Module error: Deal Analyzer render() is missing. Check console + ensure the latest file is deployed.</p>
+              </div>
+            </div>
+          `;
+        }
+      }
+      break;
+    }
     case 'market-analysis': marketAnalysis.render(); break;
     case 'equity-waterfall': equityWaterfall.render(); break;
 
