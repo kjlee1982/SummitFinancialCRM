@@ -4,7 +4,7 @@
  */
 
 import { router } from './router.js';
-import { modalManager } from './modals.js';
+import { modalManager } from './utils/modals.js';
 import { authManager } from './modules/auth.js';
 
 import { dashboard } from './modules/dashboard.js';
