@@ -9,12 +9,13 @@ import { modalManager } from '../utils/modals.js';
 
 export const contacts = {
     /**
-     * Main render function called by the router
+     * Main render function called by the router/main.js
      */
     render(state) {
         const container = document.getElementById('view-contacts');
         if (!container) return;
 
+        // Extract contact list from global state
         const contactList = state.contacts || [];
 
         container.innerHTML = `
@@ -176,7 +177,4 @@ export const contacts = {
         if (c === 'property manager') return 'bg-orange-50 text-orange-600';
         return 'bg-gray-50 text-gray-500';
     }
-	
 };
-
-export const showAddContactModal = () => contacts.showAddContactModal();

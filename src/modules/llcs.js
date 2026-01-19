@@ -186,3 +186,6 @@ export const llcs = {
         });
     }
 };
+
+export const showAddLLCModal = () => llcs.showAddLLCModal();
+export const renderLLCCards = (state) => LLC.render(state);
