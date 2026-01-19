@@ -127,55 +127,62 @@ function refreshCurrentView(view, state) {
   const wrapper = document.getElementById('view-container-wrapper');
   if (wrapper) wrapper.scrollTop = 0;
 
+  // Always render with the latest state snapshot
+  const st = state || stateManager.get();
+
   switch (view) {
-    case 'dashboard': dashboard.render(); break;
-    case 'analytics': analytics.render(); break;
+    case 'dashboard': dashboard.render(st); break;
+    case 'analytics': analytics.render(st); break;
 
-    case 'deals': deals.render(); break;
-    case 'properties': properties.render(); break;
-    case 'projects': projects.render(); break;
+    case 'deals': deals.render(st); break;
+    case 'properties': properties.render(st); break;
+    case 'projects': projects.render(st); break;
 
-    case 'investor-portal': investorPortal.render(); break;
-    case 'investors': investors.render(); break;
-    case 'contacts': contacts.render(); break;
-    case 'public-portfolio': publicPortfolio.render(); break;
+    case 'investor-portal': investorPortal.render(st); break;
+    case 'investors': investors.render(st); break;
+    case 'contacts': contacts.render(st); break;
+    case 'public-portfolio': publicPortfolio.render(st); break;
 
     case 'deal-analyzer': {
-      // Defensive: avoid hard-crashing the whole app if a module export regresses.
       if (dealAnalyzer && typeof dealAnalyzer.render === 'function') {
-        dealAnalyzer.render(state);
+        dealAnalyzer.render(st);
       } else {
-        console.error('Deal Analyzer module is missing render(). Verify src/modules/deal-analyzer.js exports dealAnalyzer with a render() method.', dealAnalyzer);
-        const host = document.getElementById('view-deal-analyzer');
-        if (host) {
-          host.innerHTML = `
-            <div class="p-6 max-w-5xl mx-auto">
-              <div class="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
-                <h2 class="text-xl font-black text-slate-900 italic tracking-tight">Deal Analyzer</h2>
-                <p class="text-sm text-slate-500 font-semibold mt-1">Module error: Deal Analyzer render() is missing. Check console + ensure the latest file is deployed.</p>
-              </div>
-            </div>
-          `;
-        }
+        console.error('Deal Analyzer module is missing render().', dealAnalyzer);
       }
       break;
     }
-    case 'market-analysis': marketAnalysis.render(); break;
-    case 'equity-waterfall': equityWaterfall.render(); break;
 
-    case 'vault': vault.render(); break;
-    case 'uploads': uploads.render(); break;
-    case 'calendar': calendar.render(); break;
-    case 'activity': activity.render(); break;
+    case 'market-analysis': marketAnalysis.render(st); break;
 
-    case 'tasks': tasks.render(); break;
-    case 'llcs': llcs.render(); break;
-    case 'settings': settingsModule.render(); break;
+    case 'equity-waterfall': {
+      if (equityWaterfall && typeof equityWaterfall.render === 'function') {
+        equityWaterfall.render(st);
+      } else {
+        console.error('Equity Waterfall module is missing render().', equityWaterfall);
+      }
+      break;
+    }
 
-    default: dashboard.render(); break;
+    case 'vault': vault.render(st); break;
+    case 'uploads': uploads.render(st); break;
+    case 'calendar': calendar.render(st); break;
+    case 'activity': activity.render(st); break;
+
+    case 'tasks': tasks.render(st); break;
+    case 'llcs': llcs.render(st); break;
+    case 'settings': settingsModule.render(st); break;
+
+    default: dashboard.render(st); break;
   }
 }
+
+
 
 window.addEventListener('view-changed', (e) => {
   refreshCurrentView(e.detail.view, stateManager.get());
 });
+
+// Debug helpers (safe to leave in; remove later if you want)
+window.getState = () => stateManager.get();
+window.refreshCurrentView = (view = router.getCurrentView()) =>
+  refreshCurrentView(view, stateManager.get());
