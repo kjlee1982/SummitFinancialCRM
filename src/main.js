@@ -14,7 +14,6 @@ import { settingsModule } from './modules/settings.js';
 import { vault } from './modules/vault.js';
 import { publicPortfolio } from './modules/publicPortfolio.js';
 import { investorPortal } from './modules/investorPortal.js';
-
 import { renderDeals, showAddDealModal } from './modules/deals.js';
 import { renderProperties, showAddPropertyModal } from './modules/properties.js';
 import { renderProjects, showAddProjectModal } from './modules/projects.js';
@@ -24,72 +23,60 @@ import { renderTasks, showAddTaskModal } from './modules/tasks.js';
 import { renderLLCs, showAddLLCModal } from './modules/llcs.js';
 
 /**
- * Sidebar manager (mobile drawer)
- * - solid (no transparency)
- * - backdrop click-away
- * - Esc to close
- * - close on nav click (mobile)
+ * Sidebar Controller (mobile drawer)
  */
-function bindSidebarOnce() {
+let sidebarOpen = false;
+
+function isDesktop() {
+  return window.matchMedia('(min-width: 768px)').matches;
+}
+
+function setSidebar(open) {
   const sidebar = document.getElementById('sidebar');
   const backdrop = document.getElementById('sidebarBackdrop');
-  const toggleBtn = document.getElementById('sidebarToggle');
-
   if (!sidebar || !backdrop) return;
 
-  // Prevent double-binding if hot-reloaded or included twice
-  if (sidebar.dataset.bound === '1') return;
-  sidebar.dataset.bound = '1';
+  // On desktop, sidebar should always be visible and backdrop hidden
+  if (isDesktop()) {
+    sidebar.classList.remove('-translate-x-full');
+    sidebar.classList.add('translate-x-0');
+    backdrop.classList.add('hidden');
+    sidebarOpen = false;
+    return;
+  }
 
-  let open = false;
+  sidebarOpen = !!open;
 
-  const setSidebar = (nextOpen) => {
-    open = !!nextOpen;
+  if (sidebarOpen) {
+    sidebar.classList.remove('-translate-x-full');
+    sidebar.classList.add('translate-x-0');
+    backdrop.classList.remove('hidden');
+  } else {
+    sidebar.classList.add('-translate-x-full');
+    sidebar.classList.remove('translate-x-0');
+    backdrop.classList.add('hidden');
+  }
+}
 
-    if (open) {
-      sidebar.classList.remove('-translate-x-full');
-      sidebar.classList.add('translate-x-0');
-      backdrop.classList.remove('hidden');
-    } else {
-      sidebar.classList.add('-translate-x-full');
-      sidebar.classList.remove('translate-x-0');
-      backdrop.classList.add('hidden');
-    }
-  };
+function initSidebarUI() {
+  const toggleBtn = document.getElementById('sidebarToggle');
+  const backdrop = document.getElementById('sidebarBackdrop');
 
-  const isDesktop = () => window.innerWidth >= 768;
-
-  // Initial state: closed on mobile; on desktop md:translate-x-0 handles it
+  // Start closed on mobile; always visible on desktop
   setSidebar(false);
 
-  toggleBtn?.addEventListener('click', () => {
-    if (isDesktop()) return; // desktop always visible via md:translate-x-0
-    setSidebar(!open);
-  });
-
-  backdrop.addEventListener('click', () => setSidebar(false));
+  toggleBtn?.addEventListener('click', () => setSidebar(!sidebarOpen));
+  backdrop?.addEventListener('click', () => setSidebar(false));
 
   window.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') setSidebar(false);
   });
 
-  // If resizing to desktop, ensure backdrop isn't stuck
+  // Keep sidebar state sane when resizing across breakpoint
   window.addEventListener('resize', () => {
-    if (isDesktop()) {
-      backdrop.classList.add('hidden');
-      // Let md:translate-x-0 control visibility; remove forced translate class
-      sidebar.classList.remove('translate-x-0');
-      sidebar.classList.remove('-translate-x-full');
-    } else {
-      // On mobile, default closed
-      setSidebar(false);
-    }
+    // Re-apply rules for current breakpoint
+    setSidebar(sidebarOpen);
   });
-
-  // Expose a safe close helper for navigation clicks
-  window.__closeSidebarMobile = () => {
-    if (!isDesktop()) setSidebar(false);
-  };
 }
 
 /**
@@ -97,7 +84,7 @@ function bindSidebarOnce() {
  */
 authModule.init();
 router.init();
-bindSidebarOnce();
+initSidebarUI();
 
 // Watch for state changes and re-render
 stateManager.subscribe((newState) => {
@@ -118,8 +105,9 @@ document.addEventListener('click', async (e) => {
   // Handle Navigation
   if (action === 'nav-link') {
     router.navigate(target.dataset.view);
-    // Close the drawer on mobile after navigation
-    window.__closeSidebarMobile?.();
+
+    // Auto-close mobile drawer after navigating
+    setSidebar(false);
     return;
   }
 
@@ -129,28 +117,30 @@ document.addEventListener('click', async (e) => {
     case 'property-add': showAddPropertyModal(); break;
     case 'project-add': showAddProjectModal(); break;
     case 'investor-add': showAddInvestorModal(); break;
-    case 'task-add': showAddTaskModal(); break;
     case 'contact-add': showAddContactModal(); break;
+    case 'task-add': showAddTaskModal(); break;
     case 'vault-add': vault.showAddModal(); break;
     case 'llc-add': showAddLLCModal(); break;
 
     case 'task-toggle': {
-      const task = Array.isArray(state.tasks) ? state.tasks.find(t => t.id === id) : null;
-      if (!task) return;
+      const task = (state.tasks || []).find(t => t.id === id);
+      if (!task) break;
       stateManager.update('tasks', id, { completed: !task.completed });
       break;
     }
 
-    // Existing confirms kept as-is (you can migrate to modalManager later)
     case 'prop-delete':
       if (confirm('Permanently delete this asset?')) stateManager.delete('properties', id);
       break;
+
     case 'project-delete':
       if (confirm('Remove this project?')) stateManager.delete('projects', id);
       break;
+
     case 'investor-delete':
       if (confirm('Remove investor record?')) stateManager.delete('investors', id);
       break;
+
     case 'vault-delete':
       if (confirm('Unlink document?')) stateManager.delete('vault', id);
       break;
