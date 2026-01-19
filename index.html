@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Summit CRM | Asset Management</title>
 
-  <!-- Tailwind (browser build; avoids needing CLI while you stabilize deploys) -->
-  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  <!-- Compiled Tailwind output (must exist at /dist/output.css in your repo) -->
+  <link href="./dist/output.css?v=1" rel="stylesheet" />
 
   <!-- Chart.js -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -14,9 +14,6 @@
   <!-- Icons + Fonts -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-
-  <!-- If you don't have favicon.svg committed, remove this line -->
-  <link rel="icon" type="image/svg+xml" href="favicon.svg">
 
   <style>
     body { font-family: 'Inter', sans-serif; }
@@ -29,16 +26,14 @@
 
 <body class="bg-slate-50 text-slate-900 overflow-hidden">
 
-  <!-- Mobile backdrop (sits OUTSIDE sidebar) -->
+  <!-- Mobile backdrop for sidebar -->
   <div id="sidebarBackdrop" class="fixed inset-0 bg-black/40 z-40 hidden md:hidden"></div>
 
-  <div class="flex h-screen w-full overflow-hidden">
-
+  <div class="flex h-screen w-full">
     <!-- Sidebar -->
     <aside
       id="sidebar"
-      class="w-64 bg-slate-900 text-slate-400 flex-shrink-0 flex flex-col transition-transform duration-300
-             -translate-x-full md:translate-x-0 fixed md:relative z-50 h-full border-r border-slate-800"
+      class="w-64 bg-slate-900 text-slate-400 flex-shrink-0 flex flex-col transition-transform duration-300 -translate-x-full md:translate-x-0 fixed md:relative z-50 h-full border-r border-slate-800"
     >
       <div class="p-6 flex-grow overflow-y-auto no-scrollbar">
         <div class="flex items-center gap-3 text-white mb-8">
@@ -106,6 +101,7 @@
           <button data-action="nav-link" data-view="activity" class="w-full flex items-center px-4 py-2.5 rounded-xl text-sm font-bold transition-all hover:text-white hover:bg-slate-800">
             <i class="fa fa-clock-rotate-left w-6"></i>Activity
           </button>
+
           <button data-action="nav-link" data-view="tasks" class="w-full flex items-center px-4 py-2.5 rounded-xl text-sm font-bold transition-all hover:text-white hover:bg-slate-800">
             <i class="fa fa-list-check w-6"></i>Tasks
           </button>
@@ -127,11 +123,9 @@
 
     <!-- Main -->
     <main class="flex-grow flex flex-col min-w-0">
-
-      <!-- Mobile header -->
       <header class="md:hidden bg-white border-b border-slate-200 p-4 flex items-center justify-between z-40">
         <span class="font-black text-slate-900 tracking-tighter uppercase">Summit<span class="text-orange-600">CRM</span></span>
-        <button id="sidebarToggle" class="w-10 h-10 flex items-center justify-center rounded-lg bg-slate-100 text-slate-600">
+        <button data-action="sidebar-toggle" class="w-10 h-10 flex items-center justify-center rounded-lg bg-slate-100 text-slate-600">
           <i class="fa fa-bars text-lg"></i>
         </button>
       </header>
@@ -144,10 +138,10 @@
         <div id="view-properties" class="view-container hidden"></div>
         <div id="view-projects" class="view-container hidden"></div>
 
-        <div id="view-investors" class="view-container hidden"></div>
         <div id="view-investor-portal" class="view-container hidden"></div>
-        <div id="view-public-portfolio" class="view-container hidden"></div>
+        <div id="view-investors" class="view-container hidden"></div>
         <div id="view-contacts" class="view-container hidden"></div>
+        <div id="view-public-portfolio" class="view-container hidden"></div>
 
         <div id="view-deal-analyzer" class="view-container hidden"></div>
         <div id="view-market-analysis" class="view-container hidden"></div>
@@ -165,11 +159,12 @@
     </main>
   </div>
 
-  <!-- Global modal root (required by modalManager) -->
-  <div id="modal-backdrop" class="fixed inset-0 bg-black/50 hidden z-[100]"></div>
-  <div id="modal-content" class="fixed inset-0 hidden z-[100] flex items-center justify-center p-4"></div>
+  <!-- REQUIRED for modalManager.show() -->
+  <div id="modal-backdrop" class="fixed inset-0 hidden items-center justify-center bg-black/40 z-[100] p-4">
+    <div id="modal-content" class="w-full max-w-2xl bg-white rounded-2xl shadow-2xl overflow-hidden"></div>
+  </div>
 
-  <!-- Single app entry -->
+  <!-- IMPORTANT: only load ONCE, and from /src so imports resolve to /src/modules/... -->
   <script type="module" src="./src/main.js?v=1"></script>
 </body>
 </html>
