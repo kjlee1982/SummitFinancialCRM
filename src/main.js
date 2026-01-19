@@ -1,121 +1,82 @@
 /**
  * src/main.js
- * The Central Command: Links all modules and orchestrates the user experience.
+ * Central command: auth + router + module render orchestration.
  */
-
-// Side-effect import: ensures Firebase initializes even if we don't reference exports here.
-import './firebase.js';
 
 import { stateManager } from './state.js';
 import { router } from './router.js';
 import { authModule } from './modules/auth.js';
-import { modalManager } from './utils/modals.js';
 
-// --- UI MODULES ---
 import { dashboard } from './modules/dashboard.js';
 import { analytics } from './modules/analytics.js';
 import { settingsModule } from './modules/settings.js';
 import { vault } from './modules/vault.js';
+
+// IMPORTANT: GitHub Pages is case-sensitive — your filename is publicportfolio.js
 import { publicPortfolio } from './modules/publicportfolio.js';
+
 import { investorPortal } from './modules/investorPortal.js';
-import { deals } from './modules/deals.js';
-import { properties } from './modules/properties.js';
-import { projects } from './modules/projects.js';
-import { investors } from './modules/investors.js';
-import { contacts } from './modules/contacts.js';
-import { tasks } from './modules/tasks.js';
-import { llcs } from './modules/llcs.js';
 
-import { activity } from './modules/activity.js';
+import { deals, showAddDealModal } from './modules/deals.js';
+import { properties, showAddPropertyModal } from './modules/properties.js';
+import { projects, showAddProjectModal } from './modules/projects.js';
+import { investors, showAddInvestorModal } from './modules/investors.js';
+import { contacts, showAddContactModal } from './modules/contacts.js';
+import { tasks, showAddTaskModal } from './modules/tasks.js';
+import { llcs, showAddLLCModal } from './modules/llcs.js';
+
+import { uploads } from './modules/uploads.js';
 import { calendar } from './modules/calendar.js';
+import { activity } from './modules/activity.js';
 import { dealAnalyzer } from './modules/deal-analyzer.js';
-import { equityWaterfall } from './modules/equity-waterfall.js';
 import { marketAnalysis } from './modules/market-analysis.js';
-import { uploadManager as uploads } from './modules/uploads.js';
+import { equityWaterfall } from './modules/equity-waterfall.js';
 
 /**
- * Helper: safely call handlers so missing exports don’t break event delegation.
+ * Sidebar helpers
  */
-function safeCall(fn, label) {
-  if (typeof fn !== 'function') {
-    console.warn(`Missing handler: ${label}`);
-    return;
-  }
-  try {
-    return fn();
-  } catch (e) {
-    console.error(`Handler failed: ${label}`, e);
-  }
+function isMobile() {
+  return window.matchMedia && window.matchMedia('(max-width: 767px)').matches;
+}
+
+function openSidebar() {
+  const sidebar = document.getElementById('sidebar');
+  const backdrop = document.getElementById('sidebarBackdrop');
+  if (!sidebar || !backdrop) return;
+  sidebar.classList.remove('-translate-x-full');
+  backdrop.classList.remove('hidden');
+}
+
+function closeSidebar() {
+  const sidebar = document.getElementById('sidebar');
+  const backdrop = document.getElementById('sidebarBackdrop');
+  if (!sidebar || !backdrop) return;
+  sidebar.classList.add('-translate-x-full');
+  backdrop.classList.add('hidden');
+}
+
+function toggleSidebar() {
+  const sidebar = document.getElementById('sidebar');
+  if (!sidebar) return;
+  const isHidden = sidebar.classList.contains('-translate-x-full');
+  if (isHidden) openSidebar();
+  else closeSidebar();
 }
 
 /**
- * Central view refresh
+ * 1) Init
  */
-function refreshCurrentView(view, state) {
-  switch (view) {
-    case 'dashboard': safeCall(() => dashboard.render(state), 'dashboard.render'); break;
-    case 'analytics': safeCall(() => analytics.render(state), 'analytics.render'); break;
+authModule.init();
+router.init();
 
-    case 'deals': safeCall(() => deals.render(state), 'deals.render'); break;
-    case 'properties': safeCall(() => properties.render(state), 'properties.render'); break;
-    case 'projects': safeCall(() => projects.render(state), 'projects.render'); break;
-
-    case 'investors': safeCall(() => investors.render(state), 'investors.render'); break;
-    case 'investor-portal': safeCall(() => investorPortal.render(state), 'investorPortal.render'); break;
-    case 'public-portfolio': safeCall(() => publicPortfolio.render(state), 'publicPortfolio.render'); break;
-    case 'contacts': safeCall(() => contacts.render(state), 'contacts.render'); break;
-
-    case 'deal-analyzer': safeCall(() => dealAnalyzer.render(state), 'dealAnalyzer.render'); break;
-    case 'market-analysis': safeCall(() => marketAnalysis.render(state), 'marketAnalysis.render'); break;
-    case 'equity-waterfall': safeCall(() => equityWaterfall.render(state), 'equityWaterfall.render'); break;
-
-    case 'vault': safeCall(() => vault.render(state), 'vault.render'); break;
-    case 'uploads': safeCall(() => uploads.render(state), 'uploads.render'); break;
-    case 'calendar': safeCall(() => calendar.render(state), 'calendar.render'); break;
-    case 'activity': safeCall(() => activity.render(state), 'activity.render'); break;
-
-    case 'tasks': safeCall(() => tasks.render(state), 'tasks.render'); break;
-    case 'llcs': safeCall(() => llcs.render(state), 'llcs.render'); break;
-    case 'settings': safeCall(() => settingsModule.render(state), 'settingsModule.render'); break;
-
-    default:
-      console.warn('Unknown view:', view);
-  }
-}
-
-/**
- * 1. INITIALIZATION (after DOM is ready so modals + containers exist)
- */
-document.addEventListener('DOMContentLoaded', () => {
-  // Start auth listener
-  safeCall(() => authModule.init(), 'authModule.init');
-
-  // Init router
-  safeCall(() => router.init(), 'router.init');
-
-  // First render once state is ready (auth module calls stateManager.init on login)
-  refreshCurrentView(router.getCurrentView(), stateManager.get?.() || {});
-});
-
-/**
- * Watch for state changes and re-render
- */
 stateManager.subscribe((newState) => {
   refreshCurrentView(router.getCurrentView(), newState);
 });
 
 /**
- * Re-render on view change
+ * 2) Global event delegation
  */
-window.addEventListener('view-changed', (e) => {
-  const view = e?.detail?.view || router.getCurrentView();
-  refreshCurrentView(view, stateManager.get?.() || {});
-});
-
-/**
- * 2. GLOBAL EVENT DELEGATION
- */
-document.addEventListener('click', async (e) => {
+document.addEventListener('click', (e) => {
   const target = e.target.closest('[data-action]');
   if (!target) return;
 
@@ -123,53 +84,79 @@ document.addEventListener('click', async (e) => {
   const id = target.dataset.id;
   const state = stateManager.get();
 
-  // Handle Navigation
+  // Sidebar / mobile UX
+  if (action === 'sidebar-toggle') {
+    toggleSidebar();
+    return;
+  }
+
   if (action === 'nav-link') {
     router.navigate(target.dataset.view);
-
-    // close sidebar on mobile if present
-    document.getElementById('sidebar')?.classList.add('-translate-x-full');
-    document.getElementById('sidebarBackdrop')?.classList.add('hidden');
+    if (isMobile()) closeSidebar();
     return;
   }
 
-  // Handle Logout
-  if (action === 'logout') {
-    modalManager.confirm(
-      'Sign out?',
-      'You will be signed out of Summit CRM.',
-      async () => {
-        await authModule.logout?.();
-        return true;
-      },
-      { danger: true, confirmText: 'Sign out' }
-    );
-    return;
-  }
-
-  // Handle Data Actions
+  // Add actions
   switch (action) {
-    // ---- ADD MODALS ----
-    case 'deal-add':       safeCall(deals.showAddDealModal, 'deals.showAddDealModal'); break;
-    case 'property-add':   safeCall(properties.showAddPropertyModal, 'properties.showAddPropertyModal'); break;
-    case 'project-add':    safeCall(projects.showAddProjectModal, 'projects.showAddProjectModal'); break;
-    case 'investor-add':   safeCall(investors.showAddInvestorModal, 'investors.showAddInvestorModal'); break;
-    case 'task-add':       safeCall(tasks.showAddTaskModal, 'tasks.showAddTaskModal'); break;
-    case 'contact-add':    safeCall(contacts.showAddContactModal, 'contacts.showAddContactModal'); break;
-    case 'llc-add':        safeCall(llcs.showAddLLCModal, 'llcs.showAddLLCModal'); break;
-    case 'vault-add':      safeCall(vault.showAddModal, 'vault.showAddModal'); break;
-
-    // ---- QUICK TOGGLES / SIMPLE ACTIONS ----
-    case 'task-toggle': {
-      const task = state.tasks?.find(t => t.id === id);
-      if (!task) return;
-      stateManager.update('tasks', id, { completed: !task.completed });
-      break;
-    }
-
-    default:
-      // Let individual modules handle delegated actions they own
-      // (No-op here by design)
-      break;
+    case 'deal-add': showAddDealModal(); return;
+    case 'property-add': showAddPropertyModal(); return;
+    case 'project-add': showAddProjectModal(); return;
+    case 'investor-add': showAddInvestorModal(); return;
+    case 'contact-add': showAddContactModal(); return;
+    case 'task-add': showAddTaskModal(); return;
+    case 'vault-add': vault.showAddModal(); return;
+    case 'llc-add': showAddLLCModal(); return;
+    case 'logout': authModule.logout(); return;
   }
+
+  // Example quick toggles (keep yours as needed)
+  if (action === 'task-toggle') {
+    const t = (state.tasks || []).find(x => x.id === id);
+    if (!t) return;
+    stateManager.update('tasks', id, { completed: !t.completed });
+  }
+});
+
+// Click backdrop to close sidebar on mobile
+document.getElementById('sidebarBackdrop')?.addEventListener('click', () => closeSidebar());
+
+/**
+ * 3) Rendering
+ */
+function refreshCurrentView(view, state) {
+  const wrapper = document.getElementById('view-container-wrapper');
+  if (wrapper) wrapper.scrollTop = 0;
+
+  switch (view) {
+    case 'dashboard': dashboard.render(); break;
+    case 'analytics': analytics.render(); break;
+
+    case 'deals': deals.render(); break;
+    case 'properties': properties.render(); break;
+    case 'projects': projects.render(); break;
+
+    case 'investor-portal': investorPortal.render(); break;
+    case 'investors': investors.render(); break;
+    case 'contacts': contacts.render(); break;
+    case 'public-portfolio': publicPortfolio.render(); break;
+
+    case 'deal-analyzer': dealAnalyzer.render(); break;
+    case 'market-analysis': marketAnalysis.render(); break;
+    case 'equity-waterfall': equityWaterfall.render(); break;
+
+    case 'vault': vault.render(); break;
+    case 'uploads': uploads.render(); break;
+    case 'calendar': calendar.render(); break;
+    case 'activity': activity.render(); break;
+
+    case 'tasks': tasks.render(); break;
+    case 'llcs': llcs.render(); break;
+    case 'settings': settingsModule.render(); break;
+
+    default: dashboard.render(); break;
+  }
+}
+
+window.addEventListener('view-changed', (e) => {
+  refreshCurrentView(e.detail.view, stateManager.get());
 });
