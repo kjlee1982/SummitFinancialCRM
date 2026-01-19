@@ -176,4 +176,6 @@ export const contacts = {
         if (c === 'property manager') return 'bg-orange-50 text-orange-600';
         return 'bg-gray-50 text-gray-500';
     }
+	
+	export const showAddContactModal = () => contacts.showAddContactModal();
 };
