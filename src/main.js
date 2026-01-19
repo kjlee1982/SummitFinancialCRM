@@ -48,10 +48,92 @@ function safeCall(fn, label) {
 }
 
 /**
+ * Sidebar (mobile drawer) controller
+ * - Desktop: sidebar always visible (md:translate-x-0), backdrop always hidden
+ * - Mobile: sidebar uses translate classes + backdrop for click-away
+ */
+const sidebarUI = (() => {
+  let open = false;
+
+  const isMobile = () => window.innerWidth < 768;
+
+  const getEls = () => ({
+    sidebar: document.getElementById('sidebar'),
+    backdrop: document.getElementById('sidebarBackdrop'),
+    toggle: document.getElementById('sidebarToggle'),
+  });
+
+  function apply(openWanted) {
+    const { sidebar, backdrop } = getEls();
+    if (!sidebar || !backdrop) return;
+
+    // Desktop: never show backdrop, let md:translate-x-0 rule win
+    if (!isMobile()) {
+      open = false;
+      backdrop.classList.add('hidden');
+      // Remove any mobile "forced open" class so md:translate-x-0 governs
+      sidebar.classList.remove('translate-x-0');
+      // Keep -translate-x-full present; md:translate-x-0 overrides at desktop
+      if (!sidebar.classList.contains('-translate-x-full')) {
+        sidebar.classList.add('-translate-x-full');
+      }
+      return;
+    }
+
+    open = !!openWanted;
+
+    if (open) {
+      sidebar.classList.remove('-translate-x-full');
+      sidebar.classList.add('translate-x-0');
+      backdrop.classList.remove('hidden');
+    } else {
+      sidebar.classList.add('-translate-x-full');
+      sidebar.classList.remove('translate-x-0');
+      backdrop.classList.add('hidden');
+    }
+  }
+
+  function toggle() {
+    apply(!open);
+  }
+
+  function closeIfMobile() {
+    if (isMobile()) apply(false);
+  }
+
+  function bindOnce() {
+    const { toggle: btn, backdrop } = getEls();
+
+    // Ensure consistent initial state after DOM is ready
+    apply(false);
+
+    btn?.addEventListener('click', () => toggle());
+
+    backdrop?.addEventListener('click', () => apply(false));
+
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') apply(false);
+    });
+
+    window.addEventListener('resize', () => {
+      // Keep state sane across rotations/resizes
+      apply(open);
+    });
+  }
+
+  return { bindOnce, closeIfMobile, apply };
+})();
+
+/**
  * 1. INITIALIZATION
  */
 authModule.init();
 router.init();
+
+// Bind sidebar behavior once (safe even if called early)
+document.addEventListener('DOMContentLoaded', () => {
+  sidebarUI.bindOnce();
+});
 
 // Watch for state changes and re-render
 stateManager.subscribe((newState) => {
@@ -72,7 +154,8 @@ document.addEventListener('click', async (e) => {
   // Handle Navigation
   if (action === 'nav-link') {
     router.navigate(target.dataset.view);
-    document.getElementById('sidebar')?.classList.add('-translate-x-full');
+    // Close drawer only on mobile (desktop stays visible)
+    sidebarUI.closeIfMobile();
     return;
   }
 
