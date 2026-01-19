@@ -200,3 +200,5 @@ export const deals = {
         return 'bg-slate-100 text-slate-600';
     }
 };
+
+export const showAddContactModal = () => deals.showAddContactModal();
