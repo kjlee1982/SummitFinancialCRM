@@ -15,7 +15,7 @@ import { settingsModule } from './modules/settings.js';
 import { vault } from './modules/vault.js';
 import { publicPortfolio } from './modules/publicportfolio.js';
 import { investorPortal } from './modules/investorPortal.js';
-import { deals, showAddDealModal } from './modules/deals.js';
+import { deals } from './modules/deals.js';
 import { properties } from './modules/properties.js';
 import { projects } from './modules/projects.js';
 import { investors } from './modules/investors.js';
@@ -54,19 +54,20 @@ document.addEventListener('click', async (e) => {
     // Handle Navigation
     if (action === 'nav-link') {
         router.navigate(target.dataset.view);
-        document.getElementById('sidebar')?.classList.add('-translate-x-full'); // Auto-close mobile menu
+        document.getElementById('sidebar')?.classList.add('-translate-x-full'); 
         return;
     }
 
-    // Handle Data Actions
+    // Handle Data Actions - Updated to call methods from objects
     switch (action) {
-        case 'deal-add': showAddDealModal(); break;
-        case 'property-add': showAddPropertyModal(); break;
-        case 'project-add': showAddProjectModal(); break;
-        case 'investor-add': showAddInvestorModal(); break;
-        case 'task-add': showAddTaskModal(); break;
-        case 'vault-add': vault.showAddModal(); break;
-        case 'llc-add': showAddLLCModal(); break;
+        case 'deal-add':     deals.showAddDealModal(); break;
+        case 'property-add': properties.showAddPropertyModal(); break;
+        case 'project-add':  projects.showAddProjectModal(); break;
+        case 'investor-add': investors.showAddInvestorModal(); break;
+        case 'task-add':     tasks.showAddTaskModal(); break;
+        case 'contact-add':  contacts.showAddContactModal(); break;
+        case 'llc-add':      llcs.showAddLLCModal(); break;
+        case 'vault-add':    vault.showAddModal(); break;
 
         case 'task-toggle':
             const task = state.tasks.find(t => t.id === id);
@@ -86,28 +87,27 @@ document.addEventListener('click', async (e) => {
  * 3. VIEW RENDERING ENGINE
  */
 function refreshCurrentView(view, state) {
-    // Reset scroll position
     const wrapper = document.getElementById('view-container-wrapper');
     if (wrapper) wrapper.scrollTop = 0;
 
     switch (view) {
-        case 'dashboard':        dashboard.render(); break;
-        case 'analytics':        analytics.render(); break;
-        case 'deals':            renderDeals(state.deals); break;
-        case 'properties':       renderProperties(state.properties); break;
-        case 'projects':         renderProjects(state.projects); break;
-        case 'investors':        renderInvestors(state.investors); break;
-        case 'investor-portal':  investorPortal.render(); break;
+        case 'dashboard':       dashboard.render(); break;
+        case 'analytics':       analytics.render(); break;
+        case 'deals':           deals.render(state); break;
+        case 'properties':      properties.render(state); break;
+        case 'projects':        projects.render(state); break;
+        case 'investors':       investors.render(state); break;
+        case 'contacts':        contacts.render(state); break;
+        case 'tasks':           tasks.render(state); break;
+        case 'llcs':            llcs.render(state); break;
+        case 'investor-portal': investorPortal.render(); break;
         case 'public-portfolio': publicPortfolio.render(); break;
-        case 'vault':            vault.render(); break;
-        case 'tasks':            renderTasks(state.tasks); break;
-        case 'llcs':             renderLLCs(state.llcs); break;
-        case 'settings':         settingsModule.render(); break;
-        default:                 dashboard.render();
+        case 'vault':           vault.render(); break;
+        case 'settings':        settingsModule.render(); break;
+        default:                dashboard.render();
     }
 }
 
-// Trigger refresh when the URL hash changes via the router
 window.addEventListener('view-changed', (e) => {
     refreshCurrentView(e.detail.view, stateManager.get());
 });
