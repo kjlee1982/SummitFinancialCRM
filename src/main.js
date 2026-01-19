@@ -21,7 +21,7 @@ import { projects, showAddProjectModal } from './modules/projects.js';
 import { investors, showAddInvestorModal } from './modules/investors.js';
 import { contacts, showAddContactModal } from './modules/contacts.js';
 import { tasks, showAddTaskModal } from './modules/tasks.js';
-import { LLCs, showAddLLCModal } from './modules/llcs.js';
+import { llcs, showAddLLCModal } from './modules/llcs.js';
 import { activity } from './modules/activity.js';
 import { calendar } from './modules/calendar.js';
 import { dealAnalyzer } from './modules/deal-analyzer.js';
