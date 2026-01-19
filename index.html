@@ -4,12 +4,18 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Summit CRM | Asset Management</title>
+
+    <!-- Compiled Tailwind output -->
     <link href="./dist/output.css" rel="stylesheet">
+
+    <!-- Chart.js -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-	<script src="src/main.js" type="module">
+
+    <!-- Icons + Fonts -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-	<link rel="icon" type="image/svg+xml" href="favicon.svg">
+    <link rel="icon" type="image/svg+xml" href="favicon.svg">
+
     <style>
         body { font-family: 'Inter', sans-serif; }
         .view-container { animation: fadeIn 0.2s ease-in-out; }
@@ -18,6 +24,7 @@
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
     </style>
 </head>
+
 <body class="bg-slate-50 text-slate-900 overflow-hidden">
 
     <div id="auth-overlay" class="fixed inset-0 z-[100] bg-slate-900 flex items-center justify-center hidden"></div>
@@ -27,7 +34,7 @@
     </div>
 
     <div class="flex h-screen overflow-hidden">
-        
+
         <aside id="sidebar" class="w-64 bg-slate-900 text-slate-400 flex-shrink-0 flex flex-col transition-transform duration-300 -translate-x-full md:translate-x-0 fixed md:relative z-50 h-full border-r border-slate-800">
             <div class="p-6 flex-grow overflow-y-auto no-scrollbar">
                 <div class="flex items-center gap-3 text-white mb-8">
@@ -64,13 +71,36 @@
                     <button data-action="nav-link" data-view="investors" class="w-full flex items-center px-4 py-2.5 rounded-xl text-sm font-bold transition-all hover:text-white hover:bg-slate-800">
                         <i class="fa fa-users-viewfinder w-6"></i>LP Directory
                     </button>
+                    <button data-action="nav-link" data-view="contacts" class="w-full flex items-center px-4 py-2.5 rounded-xl text-sm font-bold transition-all hover:text-white hover:bg-slate-800">
+                        <i class="fa fa-address-book w-6"></i>Contacts
+                    </button>
                     <button data-action="nav-link" data-view="public-portfolio" class="w-full flex items-center px-4 py-2.5 rounded-xl text-sm font-bold transition-all hover:text-white hover:bg-slate-800">
                         <i class="fa fa-share-nodes w-6"></i>Public View
+                    </button>
+
+                    <p class="text-[10px] font-black uppercase tracking-widest text-slate-500 mt-8 mb-3 px-3">Tools</p>
+                    <button data-action="nav-link" data-view="deal-analyzer" class="w-full flex items-center px-4 py-2.5 rounded-xl text-sm font-bold transition-all hover:text-white hover:bg-slate-800">
+                        <i class="fa fa-calculator w-6"></i>Deal Analyzer
+                    </button>
+                    <button data-action="nav-link" data-view="market-analysis" class="w-full flex items-center px-4 py-2.5 rounded-xl text-sm font-bold transition-all hover:text-white hover:bg-slate-800">
+                        <i class="fa fa-map-location-dot w-6"></i>Market Analysis
+                    </button>
+                    <button data-action="nav-link" data-view="equity-waterfall" class="w-full flex items-center px-4 py-2.5 rounded-xl text-sm font-bold transition-all hover:text-white hover:bg-slate-800">
+                        <i class="fa fa-water w-6"></i>Equity Waterfall
                     </button>
 
                     <p class="text-[10px] font-black uppercase tracking-widest text-slate-500 mt-8 mb-3 px-3">Operations</p>
                     <button data-action="nav-link" data-view="vault" class="w-full flex items-center px-4 py-2.5 rounded-xl text-sm font-bold transition-all hover:text-white hover:bg-slate-800">
                         <i class="fa fa-vault w-6"></i>Doc Vault
+                    </button>
+                    <button data-action="nav-link" data-view="uploads" class="w-full flex items-center px-4 py-2.5 rounded-xl text-sm font-bold transition-all hover:text-white hover:bg-slate-800">
+                        <i class="fa fa-cloud-arrow-up w-6"></i>Uploads
+                    </button>
+                    <button data-action="nav-link" data-view="calendar" class="w-full flex items-center px-4 py-2.5 rounded-xl text-sm font-bold transition-all hover:text-white hover:bg-slate-800">
+                        <i class="fa fa-calendar-days w-6"></i>Calendar
+                    </button>
+                    <button data-action="nav-link" data-view="activity" class="w-full flex items-center px-4 py-2.5 rounded-xl text-sm font-bold transition-all hover:text-white hover:bg-slate-800">
+                        <i class="fa fa-clock-rotate-left w-6"></i>Activity
                     </button>
                     <button data-action="nav-link" data-view="tasks" class="w-full flex items-center px-4 py-2.5 rounded-xl text-sm font-bold transition-all hover:text-white hover:bg-slate-800">
                         <i class="fa fa-list-check w-6"></i>Tasks
@@ -102,14 +132,25 @@
             <div id="view-container-wrapper" class="flex-grow overflow-y-auto no-scrollbar bg-slate-50">
                 <div id="view-dashboard" class="view-container hidden"></div>
                 <div id="view-analytics" class="view-container hidden"></div>
+
                 <div id="view-deals" class="view-container hidden"></div>
                 <div id="view-properties" class="view-container hidden"></div>
                 <div id="view-projects" class="view-container hidden"></div>
+
                 <div id="view-investors" class="view-container hidden"></div>
                 <div id="view-investor-portal" class="view-container hidden"></div>
                 <div id="view-public-portfolio" class="view-container hidden"></div>
-                <div id="view-vault" class="view-container hidden"></div>
                 <div id="view-contacts" class="view-container hidden"></div>
+
+                <div id="view-deal-analyzer" class="view-container hidden"></div>
+                <div id="view-market-analysis" class="view-container hidden"></div>
+                <div id="view-equity-waterfall" class="view-container hidden"></div>
+
+                <div id="view-vault" class="view-container hidden"></div>
+                <div id="view-uploads" class="view-container hidden"></div>
+                <div id="view-calendar" class="view-container hidden"></div>
+                <div id="view-activity" class="view-container hidden"></div>
+
                 <div id="view-tasks" class="view-container hidden"></div>
                 <div id="view-llcs" class="view-container hidden"></div>
                 <div id="view-settings" class="view-container hidden"></div>
@@ -117,6 +158,7 @@
         </main>
     </div>
 
-    <script type="module" src="src/main.js"></script>
+    <!-- Single, authoritative module entrypoint -->
+    <script type="module" src="./src/main.js"></script>
 </body>
 </html>
