@@ -51,6 +51,7 @@ let state = {
   llcs: [],
   projects: [],
   vault: [],
+  uploads: [],
   activities: [],
   settings: {
     companyName: "Summit Capital",
@@ -211,6 +212,7 @@ export const stateManager = {
         state.llcs = Array.isArray(state.llcs) ? state.llcs : [];
         state.projects = Array.isArray(state.projects) ? state.projects : [];
         state.vault = Array.isArray(state.vault) ? state.vault : [];
+        state.uploads = Array.isArray(state.uploads) ? state.uploads : [];
         state.activities = Array.isArray(state.activities) ? state.activities : [];
 
         console.log("State synchronized with Cloud.");
