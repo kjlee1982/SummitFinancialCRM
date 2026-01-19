@@ -123,79 +123,59 @@ document.getElementById('sidebarBackdrop')?.addEventListener('click', () => clos
 /**
  * 3) Rendering
  */
-function refreshCurrentView(view) {
+function refreshCurrentView(view, state) {
   const wrapper = document.getElementById('view-container-wrapper');
   if (wrapper) wrapper.scrollTop = 0;
 
-  const state = stateManager.get(); // <-- ALWAYS use the live state
+  // Always render with the latest state snapshot
+  const st = state || stateManager.get();
 
   switch (view) {
-    case 'dashboard': dashboard.render(state); break;
-    case 'analytics': analytics.render(state); break;
+    case 'dashboard': dashboard.render(st); break;
+    case 'analytics': analytics.render(st); break;
 
-    case 'deals': deals.render(state); break;
-    case 'properties': properties.render(state); break;
-    case 'projects': projects.render(state); break;
+    case 'deals': deals.render(st); break;
+    case 'properties': properties.render(st); break;
+    case 'projects': projects.render(st); break;
 
-    case 'investor-portal': investorPortal.render(state); break;
-    case 'investors': investors.render(state); break;
-    case 'contacts': contacts.render(state); break;
-    case 'public-portfolio': publicPortfolio.render(state); break;
+    case 'investor-portal': investorPortal.render(st); break;
+    case 'investors': investors.render(st); break;
+    case 'contacts': contacts.render(st); break;
+    case 'public-portfolio': publicPortfolio.render(st); break;
 
     case 'deal-analyzer': {
       if (dealAnalyzer && typeof dealAnalyzer.render === 'function') {
-        dealAnalyzer.render(state);
+        dealAnalyzer.render(st);
       } else {
-        console.error('Deal Analyzer module is missing render(). Verify src/modules/deal-analyzer.js exports dealAnalyzer with a render() method.', dealAnalyzer);
-        const host = document.getElementById('view-deal-analyzer');
-        if (host) {
-          host.innerHTML = `
-            <div class="p-6 max-w-5xl mx-auto">
-              <div class="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
-                <h2 class="text-xl font-black text-slate-900 italic tracking-tight">Deal Analyzer</h2>
-                <p class="text-sm text-slate-500 font-semibold mt-1">Module error: Deal Analyzer render() is missing. Check console + ensure the latest file is deployed.</p>
-              </div>
-            </div>
-          `;
-        }
+        console.error('Deal Analyzer module is missing render().', dealAnalyzer);
       }
       break;
     }
 
-    case 'market-analysis': marketAnalysis.render(state); break;
+    case 'market-analysis': marketAnalysis.render(st); break;
 
     case 'equity-waterfall': {
       if (equityWaterfall && typeof equityWaterfall.render === 'function') {
-        equityWaterfall.render(state);
+        equityWaterfall.render(st);
       } else {
-        console.error('Equity Waterfall module is missing render(). Verify src/modules/equity-waterfall.js exports equityWaterfall with a render() method.', equityWaterfall);
-        const host = document.getElementById('view-equity-waterfall');
-        if (host) {
-          host.innerHTML = `
-            <div class="p-6 max-w-5xl mx-auto">
-              <div class="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
-                <h2 class="text-xl font-black text-slate-900 italic tracking-tight">Equity Waterfall</h2>
-                <p class="text-sm text-slate-500 font-semibold mt-1">Module error: Equity Waterfall render() is missing. Check console + ensure the latest file is deployed.</p>
-              </div>
-            </div>
-          `;
-        }
+        console.error('Equity Waterfall module is missing render().', equityWaterfall);
       }
       break;
     }
 
-    case 'vault': vault.render(state); break;
-    case 'uploads': uploads.render(state); break;
-    case 'calendar': calendar.render(state); break;
-    case 'activity': activity.render(state); break;
+    case 'vault': vault.render(st); break;
+    case 'uploads': uploads.render(st); break;
+    case 'calendar': calendar.render(st); break;
+    case 'activity': activity.render(st); break;
 
-    case 'tasks': tasks.render(state); break;
-    case 'llcs': llcs.render(state); break;
-    case 'settings': settingsModule.render(state); break;
+    case 'tasks': tasks.render(st); break;
+    case 'llcs': llcs.render(st); break;
+    case 'settings': settingsModule.render(st); break;
 
-    default: dashboard.render(state); break;
+    default: dashboard.render(st); break;
   }
 }
+
 
 
 window.addEventListener('view-changed', (e) => {
