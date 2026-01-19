@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Summit CRM | Asset Management</title>
 
-  <!-- Tailwind (compiled output) -->
-  <link href="./dist/output.css?v=20260119b" rel="stylesheet" />
+  <!-- Tailwind (browser build; avoids needing CLI while you stabilize deploys) -->
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
 
   <!-- Chart.js -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -14,34 +14,31 @@
   <!-- Icons + Fonts -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+
+  <!-- If you don't have favicon.svg committed, remove this line -->
   <link rel="icon" type="image/svg+xml" href="favicon.svg">
 
   <style>
     body { font-family: 'Inter', sans-serif; }
     .view-container { animation: fadeIn 0.2s ease-in-out; }
-    @keyframes fadeIn { from { opacity: 0; transform: translateY(5px);} to { opacity: 1; transform: translateY(0);} }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
     .no-scrollbar::-webkit-scrollbar { display: none; }
     .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
   </style>
 </head>
 
 <body class="bg-slate-50 text-slate-900 overflow-hidden">
-  <!-- Auth overlay -->
-  <div id="auth-overlay" class="fixed inset-0 z-[100] bg-slate-900 flex items-center justify-center hidden"></div>
 
-  <!-- Global modal (FIXED IDS for modalManager compatibility) -->
-  <div id="modalBackdrop" class="fixed inset-0 z-[80] bg-slate-900/60 backdrop-blur-sm hidden flex items-center justify-center p-4">
-    <div id="modalContent" class="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden transform transition-all"></div>
-  </div>
+  <!-- Mobile backdrop (sits OUTSIDE sidebar) -->
+  <div id="sidebarBackdrop" class="fixed inset-0 bg-black/40 z-40 hidden md:hidden"></div>
 
-  <div class="flex h-screen overflow-hidden relative">
-    <!-- Mobile backdrop (for sidebar) -->
-    <div id="sidebarBackdrop" data-action="sidebar-close" class="fixed inset-0 bg-black/40 z-40 hidden md:hidden"></div>
+  <div class="flex h-screen w-full overflow-hidden">
 
     <!-- Sidebar -->
     <aside
       id="sidebar"
-      class="w-64 bg-slate-900 text-slate-400 flex-shrink-0 flex flex-col transition-transform duration-300 -translate-x-full md:translate-x-0 fixed md:relative z-50 h-full border-r border-slate-800"
+      class="w-64 bg-slate-900 text-slate-400 flex-shrink-0 flex flex-col transition-transform duration-300
+             -translate-x-full md:translate-x-0 fixed md:relative z-50 h-full border-r border-slate-800"
     >
       <div class="p-6 flex-grow overflow-y-auto no-scrollbar">
         <div class="flex items-center gap-3 text-white mb-8">
@@ -72,7 +69,7 @@
           </button>
 
           <p class="text-[10px] font-black uppercase tracking-widest text-slate-500 mt-8 mb-3 px-3">Client Relations</p>
-          <button data-action="nav-link" data-view="investor-portal" class="w-full flex items-center px-4 py-2.5 rounded-xl text-sm font-bold transition-all hover:text-white hover:bg-slate-800 text-orange-400">
+          <button data-action="nav-link" data-view="investor-portal" class="w-full flex items-center px-4 py-2.5 rounded-xl text-sm font-bold transition-all hover:text-white hover:bg-slate-800">
             <i class="fa fa-user-shield w-6"></i>Investor Portal
           </button>
           <button data-action="nav-link" data-view="investors" class="w-full flex items-center px-4 py-2.5 rounded-xl text-sm font-bold transition-all hover:text-white hover:bg-slate-800">
@@ -118,7 +115,7 @@
         </nav>
       </div>
 
-      <div class="p-4 border-t border-slate-800 bg-slate-900/50">
+      <div class="p-4 border-t border-slate-800 bg-slate-900">
         <button data-action="nav-link" data-view="settings" class="w-full flex items-center px-4 py-2.5 rounded-xl text-sm font-bold transition-all hover:text-white mb-1">
           <i class="fa fa-sliders w-6"></i>Settings
         </button>
@@ -130,9 +127,11 @@
 
     <!-- Main -->
     <main class="flex-grow flex flex-col min-w-0">
+
+      <!-- Mobile header -->
       <header class="md:hidden bg-white border-b border-slate-200 p-4 flex items-center justify-between z-40">
         <span class="font-black text-slate-900 tracking-tighter uppercase">Summit<span class="text-orange-600">CRM</span></span>
-        <button data-action="sidebar-toggle" class="w-10 h-10 flex items-center justify-center rounded-lg bg-slate-100 text-slate-600">
+        <button id="sidebarToggle" class="w-10 h-10 flex items-center justify-center rounded-lg bg-slate-100 text-slate-600">
           <i class="fa fa-bars text-lg"></i>
         </button>
       </header>
@@ -166,7 +165,11 @@
     </main>
   </div>
 
-  <!-- Load app ONCE -->
-  <script type="module" src="./src/main.js?v=20260119b"></script>
+  <!-- Global modal root (required by modalManager) -->
+  <div id="modal-backdrop" class="fixed inset-0 bg-black/50 hidden z-[100]"></div>
+  <div id="modal-content" class="fixed inset-0 hidden z-[100] flex items-center justify-center p-4"></div>
+
+  <!-- Single app entry -->
+  <script type="module" src="./src/main.js?v=1"></script>
 </body>
 </html>
