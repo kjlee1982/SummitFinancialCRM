@@ -48,6 +48,87 @@ const STAGE_ID_BY_LABEL = Object.fromEntries(
   DEAL_STAGES.map((s) => [String(s.label).toLowerCase(), s.id])
 );
 
+// Funnel order (excludes "deal_abandoned" since that's a terminal archive state)
+const FUNNEL_STAGE_ORDER = [
+  'sourced',
+  'underwriting',
+  'loi_sent',
+  'counter_received',
+  'loi_accepted',
+  'awaiting_dd_docs',
+  'dd_started',
+  'dd_loi_mods_needed',
+  'dd_loi_mods_accepted',
+  'closing',
+  'asset_mgmt'
+];
+
+const FUNNEL_RANK = Object.fromEntries(FUNNEL_STAGE_ORDER.map((id, idx) => [id, idx]));
+const DD_STAGE_SET = new Set([
+  'awaiting_dd_docs',
+  'dd_started',
+  'dd_loi_mods_needed',
+  'dd_loi_mods_accepted'
+]);
+
+function isAbandonedDeal(deal) {
+  if (!deal) return false;
+  if (normalizeStageId(deal.stage) === 'deal_abandoned') return true;
+  return Boolean(deal.isArchived) && String(deal.archiveType || '') === 'abandoned';
+}
+
+function getDealsSubview() {
+  try {
+    return sessionStorage.getItem('deals_subview') || 'pipeline';
+  } catch (_) {
+    return 'pipeline';
+  }
+}
+
+function setDealsSubview(v) {
+  try {
+    sessionStorage.setItem('deals_subview', String(v || 'pipeline'));
+  } catch (_) {
+    // ignore
+  }
+}
+
+function isoNow() {
+  return new Date().toISOString();
+}
+
+function computeMaxFunnelRank(deal) {
+  if (!deal) return FUNNEL_RANK.sourced;
+
+  // Prefer explicit history if present
+  const hist = Array.isArray(deal.stageHistory) ? deal.stageHistory : [];
+  let max = -1;
+  for (const h of hist) {
+    const sid = normalizeStageId(h?.stage ?? h?.stageId ?? h?.id ?? h);
+    if (sid === 'deal_abandoned') continue;
+    const r = FUNNEL_RANK[sid];
+    if (Number.isFinite(r)) max = Math.max(max, r);
+  }
+
+  // If abandoned, treat abandoned_from_stage as the terminal funnel stage
+  if (isAbandonedDeal(deal)) {
+    const from = normalizeStageId(deal.abandoned_from_stage || deal.abandonedFromStage || deal.created_from_stage);
+    const r = FUNNEL_RANK[from];
+    if (Number.isFinite(r)) max = Math.max(max, r);
+  }
+
+  // Always consider current stage
+  const cur = normalizeStageId(deal.stage);
+  if (cur !== 'deal_abandoned') {
+    const r = FUNNEL_RANK[cur];
+    if (Number.isFinite(r)) max = Math.max(max, r);
+  }
+
+  // Default
+  if (max < 0) max = FUNNEL_RANK.sourced;
+  return max;
+}
+
 function escapeHtml(s) {
   return String(s ?? '')
     .replaceAll('&', '&amp;')
@@ -143,35 +224,201 @@ export const deals = {
     const allDeals = getDealsFromArg(stateOrDeals);
     this._lastDeals = allDeals;
 
-    // Pipeline view intentionally hides Asset Management deals.
-    // Once a deal is promoted to assets, it should be managed from the Assets tab.
-    const pipelineDeals = allDeals.filter((d) => !isAssetMgmtStage(d?.stage));
+    const subview = getDealsSubview();
+
+    // "Active pipeline" intentionally hides:
+    // - Asset Management deals (managed from Assets tab)
+    // - Abandoned/archived deals (managed from Abandoned repository)
+    const pipelineDeals = allDeals.filter((d) => !isAssetMgmtStage(d?.stage) && !isAbandonedDeal(d));
+
+    const abandonedDeals = allDeals.filter((d) => isAbandonedDeal(d));
+
+    // Funnel stats (counts deals that have ever reached each step)
+    const stats = this.computeFunnelStats(allDeals);
 
     const totalVolume = pipelineDeals.reduce((sum, d) => sum + toNumber(d?.price, 0), 0);
 
     container.innerHTML = `
       <div class="p-6">
-        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
           <div>
-            <h2 class="text-2xl font-bold text-gray-900">Acquisition Pipeline</h2>
+            <h2 class="text-2xl font-bold text-gray-900">Deals</h2>
             <p class="text-sm text-gray-500 font-medium">
-              Tracking ${pipelineDeals.length} opportunities • Total Volume: ${formatters.dollars(totalVolume)}
+              Pipeline: <span class="font-bold text-slate-700">${pipelineDeals.length}</span> •
+              Abandoned: <span class="font-bold text-red-700">${abandonedDeals.length}</span> •
+              Total tracked: <span class="font-bold text-slate-700">${allDeals.length}</span>
             </p>
           </div>
 
-          <button id="add-deal-btn"
-            class="bg-slate-900 text-white px-5 py-2.5 rounded-lg hover:bg-slate-800 font-bold shadow-sm transition-all flex items-center text-sm">
-            <i class="fa fa-plus mr-2"></i>Add Deal
-          </button>
+          <div class="flex items-center gap-2">
+            <button data-action="deals-switch-view" data-view="pipeline"
+              class="px-3 py-2 rounded-lg text-sm font-black border ${subview === 'pipeline' ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300'}">
+              Pipeline
+            </button>
+            <button data-action="deals-switch-view" data-view="abandoned"
+              class="px-3 py-2 rounded-lg text-sm font-black border ${subview === 'abandoned' ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300'}">
+              Abandoned
+            </button>
+
+            <button id="add-deal-btn"
+              class="bg-slate-900 text-white px-4 py-2 rounded-lg hover:bg-slate-800 font-bold shadow-sm transition-all flex items-center text-sm">
+              <i class="fa fa-plus mr-2"></i>Add Deal
+            </button>
+          </div>
         </div>
 
-        <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-6">
-          ${this.renderDealCards(pipelineDeals)}
-        </div>
+        ${this.renderFunnelStats(stats)}
+
+        ${
+          subview === 'abandoned'
+            ? this.renderAbandonedView(abandonedDeals)
+            : `
+              <div class="mb-3 text-sm text-gray-500 font-medium">
+                Tracking ${pipelineDeals.length} active opportunities • Total Volume: ${formatters.dollars(totalVolume)}
+              </div>
+              <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-6">
+                ${this.renderDealCards(pipelineDeals)}
+              </div>
+            `
+        }
       </div>
     `;
 
     this.bindEvents();
+  },
+
+  computeFunnelStats(allDeals) {
+    const dealsList = Array.isArray(allDeals) ? allDeals : [];
+
+    const counts = {
+      totalTracked: dealsList.length,
+      sourced: 0,
+      underwriting: 0,
+      loi_sent: 0,
+      counter_received: 0,
+      loi_accepted: 0,
+      dd_started: 0,
+      closing: 0,
+      asset_mgmt: 0,
+      abandoned_total: 0,
+      abandoned_during_dd: 0
+    };
+
+    for (const d of dealsList) {
+      const maxRank = computeMaxFunnelRank(d);
+
+      // "Ever reached" counts (based on maxRank)
+      if (maxRank >= FUNNEL_RANK.sourced) counts.sourced++;
+      if (maxRank >= FUNNEL_RANK.underwriting) counts.underwriting++;
+      if (maxRank >= FUNNEL_RANK.loi_sent) counts.loi_sent++;
+      if (maxRank >= FUNNEL_RANK.counter_received) counts.counter_received++;
+      if (maxRank >= FUNNEL_RANK.loi_accepted) counts.loi_accepted++;
+      if (maxRank >= FUNNEL_RANK.dd_started) counts.dd_started++;
+      if (maxRank >= FUNNEL_RANK.closing) counts.closing++;
+      if (maxRank >= FUNNEL_RANK.asset_mgmt) counts.asset_mgmt++;
+
+      if (isAbandonedDeal(d)) {
+        counts.abandoned_total++;
+        const from = normalizeStageId(d.abandoned_from_stage || d.abandonedFromStage || '');
+        if (DD_STAGE_SET.has(from)) counts.abandoned_during_dd++;
+      }
+    }
+
+    return counts;
+  },
+
+  renderFunnelStats(stats) {
+    const s = stats || {};
+
+    // Compact strip — gives you quick conversion + abandonment at-a-glance
+    return `
+      <div class="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-6 gap-3 mb-6">
+        <div class="bg-white border border-slate-200 rounded-xl p-3">
+          <div class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Tracked</div>
+          <div class="text-lg font-black text-slate-900">${s.totalTracked ?? 0}</div>
+        </div>
+        <div class="bg-white border border-slate-200 rounded-xl p-3">
+          <div class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Underwritten</div>
+          <div class="text-lg font-black text-slate-900">${s.underwriting ?? 0}</div>
+        </div>
+        <div class="bg-white border border-slate-200 rounded-xl p-3">
+          <div class="text-[10px] font-black text-slate-400 uppercase tracking-widest">LOI Sent</div>
+          <div class="text-lg font-black text-slate-900">${s.loi_sent ?? 0}</div>
+        </div>
+        <div class="bg-white border border-slate-200 rounded-xl p-3">
+          <div class="text-[10px] font-black text-slate-400 uppercase tracking-widest">LOI Accepted</div>
+          <div class="text-lg font-black text-slate-900">${s.loi_accepted ?? 0}</div>
+        </div>
+        <div class="bg-white border border-slate-200 rounded-xl p-3">
+          <div class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Closing</div>
+          <div class="text-lg font-black text-slate-900">${s.closing ?? 0}</div>
+        </div>
+        <div class="bg-white border border-slate-200 rounded-xl p-3">
+          <div class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Abandoned (DD)</div>
+          <div class="text-lg font-black text-red-700">${s.abandoned_during_dd ?? 0}</div>
+        </div>
+      </div>
+    `;
+  },
+
+  renderAbandonedView(abandonedDeals) {
+    const list = Array.isArray(abandonedDeals) ? abandonedDeals : [];
+    return `
+      <div class="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-4">
+          <div>
+            <h3 class="text-lg font-black text-slate-900">Abandoned Deals</h3>
+            <p class="text-xs font-semibold text-slate-500">Repository for deals you marked as abandoned (kept for stats + learning).</p>
+          </div>
+          <input id="abandoned-search" type="text" placeholder="Search abandoned deals…"
+            class="w-full md:w-80 p-2.5 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-orange-500">
+        </div>
+
+        <div class="overflow-auto">
+          <table class="min-w-full text-sm">
+            <thead>
+              <tr class="text-left text-xs font-black text-slate-400 uppercase tracking-widest">
+                <th class="py-2 pr-3">Deal</th>
+                <th class="py-2 pr-3">Abandoned From</th>
+                <th class="py-2 pr-3">Reason</th>
+                <th class="py-2 pr-3">Date</th>
+                <th class="py-2 pr-3"></th>
+              </tr>
+            </thead>
+            <tbody id="abandoned-tbody">
+              ${this.renderAbandonedRows(list)}
+            </tbody>
+          </table>
+        </div>
+
+        ${list.length === 0 ? `<div class="py-10 text-center text-slate-400 font-semibold">No abandoned deals yet.</div>` : ''}
+      </div>
+    `;
+  },
+
+  renderAbandonedRows(list) {
+    const rows = (Array.isArray(list) ? list : []).map((d) => {
+      const name = escapeHtml(d?.name || 'Unnamed Deal');
+      const from = stageLabel(d?.abandoned_from_stage || d?.abandonedFromStage || d?.created_from_stage || '');
+      const reason = escapeHtml(d?.abandoned_reason || d?.abandonedReason || '');
+      const at = d?.abandonedAt || d?.abandoned_at || '';
+      const date = at ? escapeHtml(String(at).slice(0, 10)) : '';
+      const id = escapeHtml(d?.id);
+      return `
+        <tr class="border-t border-slate-100">
+          <td class="py-2 pr-3 font-black text-slate-900">${name}</td>
+          <td class="py-2 pr-3 font-semibold text-slate-700">${escapeHtml(from)}</td>
+          <td class="py-2 pr-3 text-slate-600">${reason || '<span class="text-slate-300">—</span>'}</td>
+          <td class="py-2 pr-3 text-slate-600">${date || '<span class="text-slate-300">—</span>'}</td>
+          <td class="py-2 pr-0 text-right">
+            <button data-action="deal-restore" data-id="${id}"
+              class="text-xs font-black text-slate-700 hover:text-emerald-700">Restore</button>
+          </td>
+        </tr>
+      `;
+    });
+
+    return rows.join('');
   },
 
   renderDealCards(dealList) {
@@ -279,7 +526,30 @@ export const deals = {
 
     // Bind add button (exists after each render)
     const addBtn = document.getElementById('add-deal-btn');
-    if (addBtn) addBtn.onclick = () => this.showAddDealModal();
+    if (addBtn) addBtn.onclick = () => {
+      setDealsSubview('pipeline');
+      this.showAddDealModal();
+    };
+
+    // Abandoned search (rebounds each render)
+    const search = document.getElementById('abandoned-search');
+    if (search) {
+      search.oninput = () => {
+        const q = String(search.value || '').toLowerCase().trim();
+        const list = (this._lastDeals || []).filter((d) => isAbandonedDeal(d));
+        const filtered = !q
+          ? list
+          : list.filter((d) => {
+              const name = String(d?.name || '').toLowerCase();
+              const addr = String(d?.address || '').toLowerCase();
+              const reason = String(d?.abandoned_reason || d?.abandonedReason || '').toLowerCase();
+              const from = String(stageLabel(d?.abandoned_from_stage || d?.abandonedFromStage || '')).toLowerCase();
+              return name.includes(q) || addr.includes(q) || reason.includes(q) || from.includes(q);
+            });
+        const tbody = document.getElementById('abandoned-tbody');
+        if (tbody) tbody.innerHTML = this.renderAbandonedRows(filtered);
+      };
+    }
 
     // Delegated actions (bind once)
     if (this._bound) return;
@@ -291,6 +561,13 @@ export const deals = {
 
       const action = btn.dataset.action;
       const id = btn.dataset.id;
+
+      if (action === 'deals-switch-view') {
+        const v = btn.dataset.view || 'pipeline';
+        setDealsSubview(v);
+        this.render(stateManager.get());
+        return;
+      }
 
       if (action === 'deal-delete') {
         this.confirmDelete(id);
@@ -311,7 +588,36 @@ export const deals = {
         this.promoteToAssets(id);
         return;
       }
+
+      if (action === 'deal-restore') {
+        this.restoreDeal(id);
+        return;
+      }
     });
+  },
+
+  restoreDeal(id) {
+    const deal = (this._lastDeals || []).find((d) => String(d?.id) === String(id));
+    if (!deal) return;
+
+    const restoreStage = normalizeStageId(deal.abandoned_from_stage || deal.abandonedFromStage || 'sourced');
+    const now = isoNow();
+    const hist = Array.isArray(deal.stageHistory) ? [...deal.stageHistory] : [];
+    hist.push({ stage: restoreStage, at: now });
+
+    const patch = {
+      stage: restoreStage,
+      stageHistory: hist,
+      isArchived: false,
+      archiveType: null,
+      restoredAt: now,
+      updated_at: now,
+      updatedAt: now
+    };
+
+    stateManager.update('deals', id, patch);
+    setDealsSubview('pipeline');
+    router.navigate('deals');
   },
 
   confirmDelete(id) {
@@ -345,11 +651,22 @@ export const deals = {
       return;
     }
 
+    const now = isoNow();
+    const prevStage = normalizeStageId(deal?.stage);
+
+    // Update stage history
+    const hist = Array.isArray(deal.stageHistory) ? [...deal.stageHistory] : [];
+    if (prevStage !== 'asset_mgmt') hist.push({ stage: 'asset_mgmt', at: now });
+
     // Move stage to Asset Management (canonical id)
     const patch = {
       stage: 'asset_mgmt',
-      updated_at: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
+      stageHistory: hist,
+      // Ensure it is active (not archived)
+      isArchived: false,
+      archiveType: null,
+      updated_at: now,
+      updatedAt: now
     };
 
     stateManager.update('deals', id, patch);
@@ -461,9 +778,22 @@ export const deals = {
 
         if (!data.name) throw new Error('Deal name is required.');
 
-        // Add both snake_case and camelCase timestamps (stateManager will also add createdAt)
-        data.created_at = new Date().toISOString();
-        data.createdAt = data.created_at;
+        // Timestamps (stateManager will also add createdAt)
+        const now = isoNow();
+        data.created_at = now;
+        data.createdAt = now;
+
+        // Stage history (used for funnel stats)
+        data.stage = normalizeStageId(data.stage);
+        data.stageHistory = [{ stage: data.stage, at: now }];
+
+        // If created as abandoned, archive it immediately (so it stays out of the pipeline)
+        if (data.stage === 'deal_abandoned') {
+          data.isArchived = true;
+          data.archiveType = 'abandoned';
+          data.abandonedAt = now;
+          data.abandoned_from_stage = 'sourced';
+        }
 
         const created = stateManager.add('deals', data);
 
@@ -496,12 +826,39 @@ export const deals = {
       'Edit Deal',
       formHtml,
       () => {
+        const now = isoNow();
         const patch = this.readDealFormData();
 
         if (!patch.name) throw new Error('Deal name is required.');
 
-        patch.updated_at = new Date().toISOString();
-        patch.updatedAt = patch.updated_at;
+        patch.updated_at = now;
+        patch.updatedAt = now;
+
+        const prevStage = normalizeStageId(deal?.stage);
+        const nextStage = normalizeStageId(patch.stage);
+
+        // Stage history (append only when stage changes)
+        const hist = Array.isArray(deal.stageHistory) ? [...deal.stageHistory] : [];
+        if (prevStage !== nextStage) {
+          hist.push({ stage: nextStage, at: now });
+        }
+        patch.stageHistory = hist;
+
+        // Abandon behavior: archive + remove from pipeline, but keep for stats
+        if (nextStage === 'deal_abandoned') {
+          patch.stage = 'deal_abandoned';
+          patch.isArchived = true;
+          patch.archiveType = 'abandoned';
+          patch.abandonedAt = deal.abandonedAt || now;
+          patch.abandoned_from_stage = deal.abandoned_from_stage || prevStage;
+        } else {
+          // If previously abandoned and now moved back, clear archive flags
+          if (isAbandonedDeal(deal)) {
+            patch.isArchived = false;
+            patch.archiveType = null;
+            patch.restoredAt = now;
+          }
+        }
 
         stateManager.update('deals', deal.id, patch);
 
@@ -536,6 +893,8 @@ export const deals = {
     const closing = toNumber(deal?.closing_costs, 0);
     const units = toInt(deal?.units, 0);
     const noi = toNumber(deal?.proforma_noi, 0);
+    const abandonedReason = escapeHtml(deal?.abandoned_reason || deal?.abandonedReason || '');
+    const abandonedNotes = escapeHtml(deal?.abandoned_notes || deal?.abandonedNotes || '');
 
     return `
       <div class="grid grid-cols-2 gap-4">
@@ -602,6 +961,23 @@ export const deals = {
             value="${noi}">
         </div>
 
+        <div class="col-span-2"><hr class="my-2 border-gray-100"></div>
+
+        <div class="col-span-2">
+          <label class="block text-xs font-bold text-gray-400 uppercase mb-1">Abandoned Reason (optional)</label>
+          <input type="text" id="deal-abandoned_reason"
+            class="w-full p-3 border rounded-lg focus:ring-2 focus:ring-orange-500 outline-none"
+            placeholder="Why did you pass? (price, seller, DD findings, debt terms...)" value="${abandonedReason}">
+          <p class="text-[11px] text-slate-400 font-semibold mt-1">Tip: set stage to <span class="font-black">Deal Abandoned</span> to move it into the Abandoned repository (kept for stats).</p>
+        </div>
+
+        <div class="col-span-2">
+          <label class="block text-xs font-bold text-gray-400 uppercase mb-1">Abandoned Notes (optional)</label>
+          <textarea id="deal-abandoned_notes" rows="3"
+            class="w-full p-3 border rounded-lg focus:ring-2 focus:ring-orange-500 outline-none"
+            placeholder="Any details you want to remember for next time...">${abandonedNotes}</textarea>
+        </div>
+
         ${
           isEdit
             ? `<p class="col-span-2 text-[11px] font-semibold text-slate-400 mt-1">Edits sync automatically after saving.</p>`
@@ -621,7 +997,9 @@ export const deals = {
       rehab: toNumber(document.getElementById('deal-rehab')?.value, 0),
       closing_costs: toNumber(document.getElementById('deal-closing_costs')?.value, 0),
       units: toInt(document.getElementById('deal-units')?.value, 0),
-      proforma_noi: toNumber(document.getElementById('deal-proforma_noi')?.value, 0)
+      proforma_noi: toNumber(document.getElementById('deal-proforma_noi')?.value, 0),
+      abandoned_reason: String(document.getElementById('deal-abandoned_reason')?.value ?? '').trim(),
+      abandoned_notes: String(document.getElementById('deal-abandoned_notes')?.value ?? '').trim()
     };
   },
 
