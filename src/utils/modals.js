@@ -1,141 +1,109 @@
 /**
- * src/modals.js
- * Robust modal manager that supports BOTH ID styles:
- * - modal-backdrop / modal-content
- * - modalBackdrop / modalContent
+ * src/utils/modals.js
+ * Standardized modal system (self-healing).
  */
 
-function getModalEls() {
-  const backdrop =
-    document.getElementById('modal-backdrop') ||
-    document.getElementById('modalBackdrop');
+function ensureModalDom() {
+  let backdrop = document.getElementById('modal-backdrop');
+  let content = document.getElementById('modal-content');
 
-  const content =
-    document.getElementById('modal-content') ||
-    document.getElementById('modalContent');
+  if (!backdrop) {
+    backdrop = document.createElement('div');
+    backdrop.id = 'modal-backdrop';
+    backdrop.className = 'fixed inset-0 z-[80] bg-slate-900/60 backdrop-blur-sm hidden items-center justify-center p-4';
+    document.body.appendChild(backdrop);
+  }
+
+  if (!content) {
+    content = document.createElement('div');
+    content.id = 'modal-content';
+    content.className = 'bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden transform transition-all';
+    backdrop.appendChild(content);
+  }
 
   return { backdrop, content };
 }
 
-function esc(s) {
-  return String(s ?? '')
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&#039;');
-}
-
-function showShell({ title, bodyHtml, footerHtml }) {
-  const { backdrop, content } = getModalEls();
-  if (!backdrop || !content) {
-    console.error('modalManager.show: missing modal DOM elements');
-    return false;
-  }
-
-  backdrop.classList.remove('hidden');
-  content.classList.remove('hidden');
-
-  content.innerHTML = `
-    <div class="w-full max-w-lg bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden">
-      <div class="px-6 py-4 border-b border-slate-200 flex items-center justify-between">
-        <div class="text-lg font-black text-slate-900">${esc(title || '')}</div>
-        <button data-modal-action="close" class="w-9 h-9 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center">
-          <i class="fa fa-xmark"></i>
-        </button>
-      </div>
-      <div class="p-6">${bodyHtml || ''}</div>
-      <div class="px-6 py-4 border-t border-slate-200 flex items-center justify-end gap-2">
-        ${footerHtml || ''}
-      </div>
-    </div>
-  `;
-
-  // Close handlers
-  const close = () => hide();
-
-  backdrop.onclick = close;
-
-  content.querySelectorAll('[data-modal-action="close"]').forEach(el => {
-    el.onclick = close;
-  });
-
-  document.addEventListener('keydown', onEscOnce, { once: true });
-  function onEscOnce(ev) {
-    if (ev.key === 'Escape') hide();
-  }
-
-  return true;
-}
-
-function hide() {
-  const { backdrop, content } = getModalEls();
-  if (backdrop) backdrop.classList.add('hidden');
-  if (content) {
-    content.classList.add('hidden');
-    content.innerHTML = '';
-  }
+function closeModal(backdrop) {
+  backdrop.classList.add('hidden');
+  backdrop.classList.remove('flex');
 }
 
 export const modalManager = {
-  hide,
+  show(title, htmlContent, onSave) {
+    const { backdrop, content } = ensureModalDom();
 
-  alert({ title = 'Notice', message = '' } = {}) {
-    return showShell({
-      title,
-      bodyHtml: `<div class="text-sm text-slate-700 whitespace-pre-wrap">${esc(message)}</div>`,
-      footerHtml: `
-        <button data-modal-action="close"
-          class="px-4 py-2 rounded-xl bg-slate-900 text-white font-bold hover:bg-slate-800">
-          OK
+    content.innerHTML = `
+      <div class="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50/50 rounded-t-2xl">
+        <h3 class="text-xl font-bold text-gray-800">${title || ''}</h3>
+        <button id="modal-close" class="text-gray-400 hover:text-gray-600 transition-colors">
+          <i class="fa fa-times text-xl"></i>
         </button>
-      `
+      </div>
+      <div class="p-8">
+        ${htmlContent}
+        <div class="mt-8 flex justify-end gap-3">
+          <button id="modal-cancel" class="px-6 py-2.5 rounded-lg text-gray-500 font-semibold hover:bg-gray-100 transition-all">
+            Cancel
+          </button>
+          <button id="modal-submit" class="px-6 py-2.5 bg-slate-900 text-white rounded-lg font-bold hover:bg-slate-800 transition-all shadow-md">
+            Save Changes
+          </button>
+        </div>
+      </div>
+    `;
+
+    backdrop.classList.remove('hidden');
+    backdrop.classList.add('flex');
+
+    // Click outside closes
+    backdrop.onclick = (e) => {
+      if (e.target === backdrop) closeModal(backdrop);
+    };
+
+    const btnClose = content.querySelector('#modal-close');
+    const btnCancel = content.querySelector('#modal-cancel');
+    const btnSubmit = content.querySelector('#modal-submit');
+
+    btnClose && (btnClose.onclick = () => closeModal(backdrop));
+    btnCancel && (btnCancel.onclick = () => closeModal(backdrop));
+
+    btnSubmit && (btnSubmit.onclick = async () => {
+      const formData = this.getFormData(content);
+
+      // If onSave returns false, keep modal open
+      try {
+        const res = (typeof onSave === 'function') ? await onSave(formData) : true;
+        if (res === false) return;
+        closeModal(backdrop);
+      } catch (e) {
+        console.error('modal save failed', e);
+        // keep open
+      }
     });
+
+    return true;
   },
 
-  confirm({
-    title = 'Confirm',
-    message = '',
-    danger = false,
-    confirmText = 'Confirm',
-    cancelText = 'Cancel',
-    onConfirm
-  } = {}) {
-    const okBtnClass = danger
-      ? 'bg-red-600 hover:bg-red-700'
-      : 'bg-slate-900 hover:bg-slate-800';
+  confirm(title, message, onConfirm, opts = {}) {
+    const danger = !!opts.danger;
+    const confirmText = opts.confirmText || 'Confirm';
 
-    const shown = showShell({
-      title,
-      bodyHtml: `<div class="text-sm text-slate-700 whitespace-pre-wrap">${esc(message)}</div>`,
-      footerHtml: `
-        <button data-modal-action="close"
-          class="px-4 py-2 rounded-xl bg-slate-100 text-slate-800 font-bold hover:bg-slate-200">
-          ${esc(cancelText)}
-        </button>
-        <button id="modal-confirm-btn"
-          class="px-4 py-2 rounded-xl text-white font-bold ${okBtnClass}">
-          ${esc(confirmText)}
-        </button>
-      `
+    const html = `
+      <div class="text-sm text-gray-600 whitespace-pre-wrap">${message || ''}</div>
+    `;
+
+    return this.show(title, html, async () => {
+      const res = await (onConfirm?.());
+      return res !== false;
+    }, danger, confirmText);
+  },
+
+  getFormData(container) {
+    const data = {};
+    container.querySelectorAll('input, select, textarea').forEach(el => {
+      if (el.id) data[el.id] = el.value;
     });
-
-    if (!shown) return false;
-
-    const confirmBtn = document.getElementById('modal-confirm-btn');
-    if (confirmBtn) {
-      confirmBtn.onclick = async () => {
-        try {
-          const res = await (onConfirm?.());
-          // If explicitly returns false, keep modal open
-          if (res === false) return;
-          hide();
-        } catch (e) {
-          console.error('modal confirm failed', e);
-          // Keep open so user can try again
-        }
-      };
-    }
-    return true;
+    return data;
   }
 };
