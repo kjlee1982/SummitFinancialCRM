@@ -402,7 +402,7 @@ export const deals = {
         <div>
           <label class="block text-xs font-bold text-gray-400 uppercase mb-1">Pipeline Stage</label>
           <select id="deal-stage" class="w-full p-3 border rounded-lg focus:ring-2 focus:ring-orange-500 outline-none">
-            ${['Sourced', 'Underwriting', 'LOI Sent', 'Closing']
+            ${['Sourced', 'Underwriting', 'LOI Sent', 'Counter Offer Received', 'Counter LOI Submitted', 'LOI Accepted', 'Awaiting Due Diligence Docs', 'Due Diligence', 'Closing']
               .map((s) => `<option ${stage === s ? 'selected' : ''}>${escapeHtml(s)}</option>`)
               .join('')}
           </select>
