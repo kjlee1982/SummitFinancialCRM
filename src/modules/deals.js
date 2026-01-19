@@ -20,6 +20,34 @@ import { router } from '../router.js';
 import { formatters } from '../utils/formatters.js';
 import { modalManager } from '../utils/modals.js';
 
+/**
+ * Canonical stage definitions.
+ *
+ * IMPORTANT:
+ * - We store the stage as a stable `id` (e.g., "dd_started") rather than the display label.
+ * - For backward compatibility, we still accept older saved deals whose `stage` is a label
+ *   (e.g., "Closing"). Those are normalized at render/save time.
+ */
+export const DEAL_STAGES = [
+  { id: 'sourced', label: 'Sourced' },
+  { id: 'underwriting', label: 'Underwriting' },
+  { id: 'loi_sent', label: 'LOI Sent' },
+  { id: 'counter_received', label: 'Counter Received' },
+  { id: 'loi_accepted', label: 'LOI Accepted' },
+  { id: 'awaiting_dd_docs', label: 'Awaiting DD Docs' },
+  { id: 'dd_started', label: 'Due Diligence Started' },
+  { id: 'dd_loi_mods_needed', label: 'DD LOI Modifications Needed' },
+  { id: 'dd_loi_mods_accepted', label: 'DD LOI Modifications Accepted' },
+  { id: 'closing', label: 'Closing' },
+  { id: 'deal_abandoned', label: 'Deal Abandoned' },
+  { id: 'asset_mgmt', label: 'Asset Management' }
+];
+
+const STAGE_BY_ID = Object.fromEntries(DEAL_STAGES.map((s) => [s.id, s]));
+const STAGE_ID_BY_LABEL = Object.fromEntries(
+  DEAL_STAGES.map((s) => [String(s.label).toLowerCase(), s.id])
+);
+
 function escapeHtml(s) {
   return String(s ?? '')
     .replaceAll('&', '&amp;')
@@ -44,6 +72,62 @@ function getDealsFromArg(stateOrDeals) {
   return Array.isArray(stateOrDeals?.deals) ? stateOrDeals.deals : [];
 }
 
+function normalizeStageId(stage) {
+  const raw = String(stage ?? '').trim();
+  if (!raw) return 'sourced';
+  const lower = raw.toLowerCase();
+
+  // Already a canonical id
+  if (STAGE_BY_ID[raw]) return raw;
+  if (STAGE_BY_ID[lower]) return lower;
+
+  // Backward-compat: stored as label
+  if (STAGE_ID_BY_LABEL[lower]) return STAGE_ID_BY_LABEL[lower];
+
+  // Heuristic: normalize to underscore id
+  const candidate = lower.replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
+  if (STAGE_BY_ID[candidate]) return candidate;
+
+  return 'sourced';
+}
+
+function stageLabel(stage) {
+  const id = normalizeStageId(stage);
+  return STAGE_BY_ID[id]?.label || 'Sourced';
+}
+
+function isStage(stage, id) {
+  return normalizeStageId(stage) === id;
+}
+
+function isAssetMgmtStage(stage) {
+  return isStage(stage, 'asset_mgmt');
+}
+
+async function ensurePropertyFromDeal(deal) {
+  if (!deal || !deal.id) return;
+
+  const st = stateManager.get();
+  const props = Array.isArray(st?.properties) ? st.properties : [];
+
+  // Prevent duplicates: if a property already references this deal, do nothing
+  const exists = props.some((p) => String(p?.deal_id ?? '') === String(deal.id));
+  if (exists) return;
+
+  const propName = String(deal?.name || '').trim() || 'Unnamed Property';
+  const valuation = toNumber(deal?.price, 0);
+  const units = toInt(deal?.units, 0);
+
+  await stateManager.add('properties', {
+    name: propName,
+    valuation,
+    units,
+    deal_id: String(deal.id),
+    source: 'deal_pipeline',
+    created_from_stage: String(deal?.stage || '')
+  });
+}
+
 export const deals = {
   _bound: false,
   _lastDeals: [],
@@ -56,10 +140,14 @@ export const deals = {
     const container = document.getElementById('view-deals');
     if (!container) return;
 
-    const dealList = getDealsFromArg(stateOrDeals);
-    this._lastDeals = dealList;
+    const allDeals = getDealsFromArg(stateOrDeals);
+    this._lastDeals = allDeals;
 
-    const totalVolume = dealList.reduce((sum, d) => sum + toNumber(d?.price, 0), 0);
+    // Pipeline view intentionally hides Asset Management deals.
+    // Once a deal is promoted to assets, it should be managed from the Assets tab.
+    const pipelineDeals = allDeals.filter((d) => !isAssetMgmtStage(d?.stage));
+
+    const totalVolume = pipelineDeals.reduce((sum, d) => sum + toNumber(d?.price, 0), 0);
 
     container.innerHTML = `
       <div class="p-6">
@@ -67,7 +155,7 @@ export const deals = {
           <div>
             <h2 class="text-2xl font-bold text-gray-900">Acquisition Pipeline</h2>
             <p class="text-sm text-gray-500 font-medium">
-              Tracking ${dealList.length} opportunities • Total Volume: ${formatters.dollars(totalVolume)}
+              Tracking ${pipelineDeals.length} opportunities • Total Volume: ${formatters.dollars(totalVolume)}
             </p>
           </div>
 
@@ -78,7 +166,7 @@ export const deals = {
         </div>
 
         <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-6">
-          ${this.renderDealCards(dealList)}
+          ${this.renderDealCards(pipelineDeals)}
         </div>
       </div>
     `;
@@ -108,7 +196,9 @@ export const deals = {
         const yieldOnCost = totalBasis > 0 ? proformaNoi / totalBasis : 0;
         const ppu = units > 0 ? price / units : 0;
 
-        const stageLabel = escapeHtml(deal?.stage || 'Sourced');
+        const stageId = normalizeStageId(deal?.stage);
+        const stageLabelText = stageLabel(deal?.stage);
+        const stageLabelEsc = escapeHtml(stageLabelText);
         const name = escapeHtml(deal?.name || 'Unnamed Deal');
         const address = escapeHtml(deal?.address || 'Address not set');
 
@@ -116,8 +206,8 @@ export const deals = {
           <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden hover:border-orange-300 transition-all group">
             <div class="p-5">
               <div class="flex justify-between items-start mb-4">
-                <span class="px-2 py-1 rounded text-[10px] font-bold uppercase ${this.getStageClass(deal?.stage)}">
-                  ${stageLabel}
+                <span class="px-2 py-1 rounded text-[10px] font-bold uppercase ${this.getStageClass(stageId)}">
+                  ${stageLabelEsc}
                 </span>
 
                 <div class="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -158,12 +248,24 @@ export const deals = {
               </div>
             </div>
 
-            <div class="bg-gray-50 px-5 py-3 flex justify-between items-center">
+            <div class="bg-gray-50 px-5 py-3 flex justify-between items-center gap-2">
               <span class="text-[10px] font-bold text-gray-400 uppercase tracking-tighter">Units: ${units}</span>
-              <button data-action="deal-details" data-id="${escapeHtml(deal?.id)}"
-                class="text-xs font-bold text-slate-600 hover:text-orange-600 transition-colors">
-                Analyze Deal <i class="fa fa-chevron-right ml-1"></i>
-              </button>
+
+              <div class="flex items-center gap-3">
+                ${
+                  stageId === 'closing'
+                    ? `<button data-action="deal-to-assets" data-id="${escapeHtml(deal?.id)}"
+                        class="text-xs font-black text-emerald-700 hover:text-emerald-800 transition-colors">
+                        Move to Assets <i class="fa fa-arrow-right ml-1"></i>
+                      </button>`
+                    : ''
+                }
+
+                <button data-action="deal-details" data-id="${escapeHtml(deal?.id)}"
+                  class="text-xs font-bold text-slate-600 hover:text-orange-600 transition-colors">
+                  Analyze Deal <i class="fa fa-chevron-right ml-1"></i>
+                </button>
+              </div>
             </div>
           </div>
         `;
@@ -204,6 +306,11 @@ export const deals = {
         this.openAnalyzer(id);
         return;
       }
+
+      if (action === 'deal-to-assets') {
+        this.promoteToAssets(id);
+        return;
+      }
     });
   },
 
@@ -224,6 +331,34 @@ export const deals = {
         danger: true
       }
     );
+  },
+
+  async promoteToAssets(id) {
+    const deal = (this._lastDeals || []).find((d) => String(d?.id) === String(id));
+    if (!deal) {
+      modalManager.show(
+        'Deal not found',
+        `<p class="text-sm font-semibold text-slate-700">That deal could not be found. It may have been deleted or not synced yet.</p>`,
+        () => true,
+        { submitLabel: 'Close', hideCancel: true }
+      );
+      return;
+    }
+
+    // Move stage to Asset Management (canonical id)
+    const patch = {
+      stage: 'asset_mgmt',
+      updated_at: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+
+    stateManager.update('deals', id, patch);
+
+    // Create linked property (idempotent)
+    await ensurePropertyFromDeal({ ...deal, stage: 'asset_mgmt' });
+
+    // Jump to Assets
+    router.navigate('properties');
   },
 
   openAnalyzer(id) {
@@ -330,7 +465,21 @@ export const deals = {
         data.created_at = new Date().toISOString();
         data.createdAt = data.created_at;
 
-        stateManager.add('deals', data);
+        const created = stateManager.add('deals', data);
+
+        // Auto-promote if added directly to Asset Management
+        // (idempotent; will not create duplicate properties)
+        setTimeout(() => {
+          try {
+            const st = stateManager.get();
+            const dealsList = Array.isArray(st?.deals) ? st.deals : [];
+            const createdId = typeof created === 'object' ? created?.id : created;
+            const d = dealsList.find((x) => String(x?.id) === String(createdId)) || dealsList[dealsList.length - 1];
+            if (d && isAssetMgmtStage(d?.stage)) ensurePropertyFromDeal(d);
+          } catch (_) {
+            // ignore
+          }
+        }, 0);
         return true;
       },
       {
@@ -355,6 +504,18 @@ export const deals = {
         patch.updatedAt = patch.updated_at;
 
         stateManager.update('deals', deal.id, patch);
+
+        // Auto-promote if stage is Asset Management
+        setTimeout(() => {
+          try {
+            const st = stateManager.get();
+            const dealsList = Array.isArray(st?.deals) ? st.deals : [];
+            const d = dealsList.find((x) => String(x?.id) === String(deal.id));
+            if (d && isAssetMgmtStage(d?.stage)) ensurePropertyFromDeal(d);
+          } catch (_) {
+            // ignore
+          }
+        }, 0);
         return true;
       },
       {
@@ -370,7 +531,7 @@ export const deals = {
     const name = escapeHtml(deal?.name || '');
     const address = escapeHtml(deal?.address || '');
     const price = toNumber(deal?.price, 0);
-    const stage = escapeHtml(deal?.stage || 'Sourced');
+    const stageId = normalizeStageId(deal?.stage || 'sourced');
     const rehab = toNumber(deal?.rehab, 0);
     const closing = toNumber(deal?.closing_costs, 0);
     const units = toInt(deal?.units, 0);
@@ -402,9 +563,12 @@ export const deals = {
         <div>
           <label class="block text-xs font-bold text-gray-400 uppercase mb-1">Pipeline Stage</label>
           <select id="deal-stage" class="w-full p-3 border rounded-lg focus:ring-2 focus:ring-orange-500 outline-none">
-            ${['Sourced', 'Underwriting', 'LOI Sent', 'Counter Offer Received', 'Counter LOI Submitted', 'LOI Accepted', 'Awaiting Due Diligence Docs', 'Due Diligence', 'Closing']
-              .map((s) => `<option ${stage === s ? 'selected' : ''}>${escapeHtml(s)}</option>`)
-              .join('')}
+            ${DEAL_STAGES.map(
+              (s) =>
+                `<option value="${escapeHtml(s.id)}" ${stageId === s.id ? 'selected' : ''}>${escapeHtml(
+                  s.label
+                )}</option>`
+            ).join('')}
           </select>
         </div>
 
@@ -448,11 +612,12 @@ export const deals = {
   },
 
   readDealFormData() {
+    const stageRaw = String(document.getElementById('deal-stage')?.value ?? 'sourced').trim();
     return {
       name: String(document.getElementById('deal-name')?.value ?? '').trim(),
       address: String(document.getElementById('deal-address')?.value ?? '').trim(),
       price: toNumber(document.getElementById('deal-price')?.value, 0),
-      stage: String(document.getElementById('deal-stage')?.value ?? 'Sourced').trim(),
+      stage: normalizeStageId(stageRaw),
       rehab: toNumber(document.getElementById('deal-rehab')?.value, 0),
       closing_costs: toNumber(document.getElementById('deal-closing_costs')?.value, 0),
       units: toInt(document.getElementById('deal-units')?.value, 0),
@@ -461,10 +626,21 @@ export const deals = {
   },
 
   getStageClass(stage) {
-    const s = String(stage ?? '').toLowerCase();
-    if (s === 'closing') return 'bg-emerald-100 text-emerald-700';
-    if (s === 'loi sent') return 'bg-blue-100 text-blue-700';
-    if (s === 'underwriting') return 'bg-orange-100 text-orange-700';
+    const id = normalizeStageId(stage);
+    if (id === 'closing') return 'bg-emerald-100 text-emerald-700';
+    if (id === 'asset_mgmt') return 'bg-emerald-50 text-emerald-700';
+    if (id === 'deal_abandoned') return 'bg-red-100 text-red-700';
+
+    if (id === 'loi_sent') return 'bg-blue-100 text-blue-700';
+    if (id === 'counter_received') return 'bg-indigo-100 text-indigo-700';
+    if (id === 'loi_accepted') return 'bg-sky-100 text-sky-700';
+
+    if (id === 'awaiting_dd_docs') return 'bg-violet-100 text-violet-700';
+    if (id === 'dd_started') return 'bg-violet-100 text-violet-700';
+    if (id === 'dd_loi_mods_needed') return 'bg-fuchsia-100 text-fuchsia-700';
+    if (id === 'dd_loi_mods_accepted') return 'bg-purple-100 text-purple-700';
+
+    if (id === 'underwriting') return 'bg-orange-100 text-orange-700';
     return 'bg-slate-100 text-slate-600';
   }
 };
