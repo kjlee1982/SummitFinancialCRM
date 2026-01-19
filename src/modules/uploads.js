@@ -4,7 +4,7 @@
  */
 
 import { stateManager } from '../state.js';
-import { uploadManager } from '../utils/uploads.js';
+import { uploadManager } from '../modules/uploads.js';
 import { escapeHtml } from '../utils/formatters.js';
 
 function getUploadsForContext(ctx) {
