@@ -201,4 +201,5 @@ export const deals = {
     }
 };
 
-export const showAddContactModal = () => deals.showAddContactModal();
+export const showAddDealModal = () => deals.showAddDealModal();
+export const renderDeals = (state) => deals.render(state);
