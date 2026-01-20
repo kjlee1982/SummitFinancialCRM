@@ -4,7 +4,6 @@
  */
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-console.log("Firebase projectId:", app.options.projectId);
 import { getAuth } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 import { getFirestore } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 import { getStorage } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
@@ -35,3 +34,4 @@ export const syncStateToCloud = async (userId, state) => {
     // This function would be called by stateManager.saveAndNotify()
     // to push data to the 'users/userId/data' collection in Firestore
 };
+
