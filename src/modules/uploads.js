@@ -4,7 +4,8 @@
  */
 
 import { stateManager } from '../state.js';
-import { uploadManager } from '../modules/uploads.js';
+// NOTE: uploadManager lives in src/utils so uploads view stays thin.
+import { uploadManager } from '../utils/uploadManager.js';
 import { escapeHtml } from '../utils/formatters.js';
 
 function getUploadsForContext(ctx) {
@@ -53,7 +54,7 @@ function ensureBinds() {
   if (ensureBinds._bound) return;
   ensureBinds._bound = true;
 
-  document.addEventListener('click', (e) => {
+  document.addEventListener('click', async (e) => {
     const btn = e.target.closest('[data-action="upload-delete"]');
     if (!btn) return;
 
@@ -63,7 +64,7 @@ function ensureBinds() {
     // keep it simple (you can swap to modalManager danger confirm later)
     if (!confirm('Delete this upload?')) return;
 
-    uploadManager.deleteUpload(id);
+    await uploadManager.deleteUpload(id);
     // Re-render current view (uploads render is cheap)
     uploads.render();
   });
@@ -110,3 +111,5 @@ export const uploads = {
     renderList(ctx);
   }
 };
+
+export { uploadManager }; // keeps `import { uploadManager } from '../modules/uploads.js'` working
