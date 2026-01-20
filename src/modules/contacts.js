@@ -57,7 +57,23 @@ function buildContactFormHtml(contact = null) {
   const email = contact?.email ?? '';
   const notes = contact?.notes ?? '';
 
-  const categories = ['Broker', 'Lender', 'Attorney', 'Property Manager', 'Contractor', 'Insurance', 'General'];
+  // Expanded categories to support personal + informal relationship tracking
+  // (Friend/Family/Acquaintance) in addition to professional roles.
+  const categories = [
+    'Broker',
+    'Lender',
+    'Attorney',
+    'Property Manager',
+    'Contractor',
+    'Insurance',
+    'Investor',
+    'Partner',
+    'Vendor',
+    'Friend',
+    'Family',
+    'Acquaintance',
+    'General'
+  ];
 
   return `
     <div class="grid grid-cols-2 gap-4">
@@ -555,4 +571,3 @@ export const contacts = {
     return 'bg-gray-50 text-gray-500';
   }
 };
-export const showAddContactModal = () => contacts.showAddContactModal();
