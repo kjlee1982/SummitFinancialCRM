@@ -13,6 +13,16 @@ function isValidDate(d) {
   return d instanceof Date && !Number.isNaN(d.getTime());
 }
 
+// Small, reusable HTML escaper for safe DOM injection
+export function escapeHtml(s) {
+  return String(s ?? '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#039;');
+}
+
 export const formatters = {
   /**
    * Currencies: 1250000 -> $1,250,000
@@ -101,3 +111,15 @@ export const formatters = {
     return String(number);
   }
 };
+
+// Some modules render user-provided strings into HTML.
+// Provide a small, reusable HTML escaper as a named export.
+export function escapeHtml(input) {
+  if (input === undefined || input === null) return '';
+  return String(input)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
