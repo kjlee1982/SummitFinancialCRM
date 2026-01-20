@@ -48,21 +48,6 @@ function getProperties(state) {
   return Array.isArray(state?.properties) ? state.properties : [];
 }
 
-function isMemberLinkedToLLC(p, llc) {
-  // Member linking supports:
-  //  - property.member_llc_id === llc.id
-  //  - property.member_llc matches llc.name (legacy/back-compat)
-  const pMemberId = String(p?.member_llc_id ?? '');
-  const llcId = String(llc?.id ?? '');
-  if (pMemberId && llcId && pMemberId === llcId) return true;
-
-  const memberLegacy = normalizeKey(p?.member_llc);
-  const llcName = normalizeKey(llc?.name);
-  if (memberLegacy && llcName && memberLegacy === llcName) return true;
-
-  return false;
-}
-
 export const llcs = {
   _bound: false,
   _lastState: null,
@@ -134,7 +119,6 @@ export const llcs = {
 
     return entitiesList.map(llc => {
       const ownedProperties = (allProperties || []).filter(p => this.isPropertyOwnedByLLC(p, llc));
-      const memberLinkedProperties = (allProperties || []).filter(p => isMemberLinkedToLLC(p, llc));
 
       const name = escapeHtml(llc?.name || 'Unnamed LLC');
       const ein = escapeHtml(llc?.ein || 'PENDING');
@@ -236,27 +220,6 @@ export const llcs = {
             </div>
           </div>
 
-          <div class="p-5 pt-0">
-            <h4 class="text-[10px] font-black text-slate-400 uppercase mb-3 tracking-[0.15em]">Member Interests</h4>
-            <div class="space-y-2">
-              ${memberLinkedProperties.length > 0 ? memberLinkedProperties.map(p => `
-                <div class="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-100 hover:bg-white hover:shadow-sm transition-all cursor-default">
-                  <div class="flex items-center text-xs font-bold text-slate-700">
-                    <div class="w-6 h-6 rounded-md bg-white border border-slate-200 flex items-center justify-center mr-3 text-[10px]">
-                      <i class="fa fa-circle-nodes text-slate-400"></i>
-                    </div>
-                    ${escapeHtml(p?.name || 'Unnamed Property')}
-                  </div>
-                  <span class="text-[10px] bg-slate-200 text-slate-600 px-2 py-0.5 rounded font-black uppercase tracking-tighter">MEMBER</span>
-                </div>
-              `).join('') : `
-                <div class="py-6 text-center border border-dashed border-slate-100 rounded-xl">
-                  <p class="text-[10px] text-slate-400 font-bold uppercase italic">No member interests linked to this entity</p>
-                </div>
-              `}
-            </div>
-          </div>
-
           <div class="px-5 py-4 bg-slate-50 border-t border-slate-100 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
             <div class="text-[11px] text-slate-500">
               Manager: <span class="font-black text-slate-900 uppercase">${manager}</span>
@@ -270,14 +233,10 @@ export const llcs = {
                 <i class="fa fa-fingerprint mr-2"></i> Tax ID
               </button>
 
+              <!-- NEW: Assign Property action -->
               <button data-action="llc-assign-property" data-id="${escapeHtml(llc?.id)}"
                 class="flex items-center text-[10px] font-black text-slate-600 uppercase bg-white border border-slate-200 px-3 py-1.5 rounded-lg hover:border-orange-500 hover:text-orange-600 transition-all shadow-sm">
-                <i class="fa fa-link mr-2"></i> Title Asset
-              </button>
-
-              <button data-action="llc-link-member" data-id="${escapeHtml(llc?.id)}"
-                class="flex items-center text-[10px] font-black text-slate-600 uppercase bg-white border border-slate-200 px-3 py-1.5 rounded-lg hover:border-orange-500 hover:text-orange-600 transition-all shadow-sm">
-                <i class="fa fa-circle-nodes mr-2"></i> Link Member
+                <i class="fa fa-link mr-2"></i> Assign Property
               </button>
             </div>
           </div>
@@ -311,12 +270,7 @@ export const llcs = {
       }
 
       if (action === 'llc-assign-property') {
-        this.showAssignPropertyModal(id, 'owning');
-        return;
-      }
-
-      if (action === 'llc-link-member') {
-        this.showAssignPropertyModal(id, 'member');
+        this.showAssignPropertyModal(id);
         return;
       }
     });
@@ -341,7 +295,7 @@ export const llcs = {
     );
   },
 
-  showAssignPropertyModal(llcId, mode = 'owning') {
+  showAssignPropertyModal(llcId) {
     const entities = getEntities(this._lastState);
     const properties = getProperties(this._lastState);
 
@@ -356,12 +310,8 @@ export const llcs = {
       return;
     }
 
-    const modeLabel = mode === 'member' ? 'member' : 'owning';
-
-    // Properties that are NOT already linked to this LLC for the requested mode
-    const available = (modeLabel === 'member')
-      ? properties.filter(p => !isMemberLinkedToLLC(p, llc))
-      : properties.filter(p => !this.isPropertyOwnedByLLC(p, llc));
+    // Properties that are NOT already assigned to this LLC
+    const available = properties.filter(p => !this.isPropertyOwnedByLLC(p, llc));
 
     const optionsHtml = available.length
       ? available
@@ -375,8 +325,7 @@ export const llcs = {
     const formHtml = `
       <div class="space-y-4">
         <p class="text-sm font-semibold text-slate-700">
-          Link a property to <span class="font-black">${escapeHtml(llc?.name || 'this LLC')}</span>
-          as <span class="font-black">${modeLabel === 'member' ? 'a member interest' : 'the titled owning LLC'}</span>.
+          Assign a property to <span class="font-black">${escapeHtml(llc?.name || 'this LLC')}</span>.
         </p>
 
         <div>
@@ -390,10 +339,7 @@ export const llcs = {
         <div class="p-4 bg-orange-50 rounded-xl border border-orange-100">
           <p class="text-[10px] text-orange-700 font-bold leading-relaxed italic">
             <i class="fa fa-info-circle mr-1"></i>
-            ${modeLabel === 'member'
-              ? `This will set <span class="font-black">property.member_llc_id</span> and also update <span class="font-black">property.member_llc</span> for readability.`
-              : `This will set <span class="font-black">property.llc_id</span> and also update <span class="font-black">property.owning_llc</span> for backward compatibility.`
-            }
+            This will set <span class="font-black">property.llc_id</span> and also update <span class="font-black">property.owning_llc</span> for backward compatibility.
           </p>
         </div>
       </div>
@@ -408,24 +354,17 @@ export const llcs = {
 
         if (!propertyId) throw new Error('Please select a property.');
 
-        if (modeLabel === 'member') {
-          stateManager.update('properties', propertyId, {
-            member_llc_id: llc.id,
-            member_llc: llc.name
-          });
-        } else {
-          // Update property linkage:
-          // - llc_id is the canonical owning link
-          // - owning_llc is kept in sync for legacy matching / readability
-          stateManager.update('properties', propertyId, {
-            llc_id: llc.id,
-            owning_llc: llc.name
-          });
-        }
+        // Update property linkage:
+        // - llc_id is the canonical link
+        // - owning_llc is kept in sync for legacy matching / readability
+        stateManager.update('properties', propertyId, {
+          llc_id: llc.id,
+          owning_llc: llc.name
+        });
 
         return true;
       },
-      { submitLabel: modeLabel === 'member' ? 'Link' : 'Assign', cancelLabel: 'Cancel' }
+      { submitLabel: 'Assign', cancelLabel: 'Cancel' }
     );
   },
 

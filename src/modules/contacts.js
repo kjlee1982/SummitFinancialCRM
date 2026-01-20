@@ -57,23 +57,7 @@ function buildContactFormHtml(contact = null) {
   const email = contact?.email ?? '';
   const notes = contact?.notes ?? '';
 
-  // Expanded categories to support personal + informal relationship tracking
-  // (Friend/Family/Acquaintance) in addition to professional roles.
-  const categories = [
-    'Broker',
-    'Lender',
-    'Attorney',
-    'Property Manager',
-    'Contractor',
-    'Insurance',
-    'Investor',
-    'Partner',
-    'Vendor',
-    'Friend',
-    'Family',
-    'Acquaintance',
-    'General'
-  ];
+  const categories = ['Broker', 'Lender', 'Attorney', 'Property Manager', 'Contractor', 'Insurance', 'General'];
 
   return `
     <div class="grid grid-cols-2 gap-4">
@@ -572,7 +556,5 @@ export const contacts = {
   }
 };
 
-// Keep parity with other modules that export a named `showAdd*Modal` function
-export function showAddContactModal() {
-  return contacts.showAddContactModal();
-}
+// Compatibility: main.js expects a named export helper
+export const showAddContactModal = () => contacts.showAddContactModal();

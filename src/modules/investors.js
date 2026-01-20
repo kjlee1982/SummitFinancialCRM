@@ -97,7 +97,7 @@ function getInvestorFormHtml(inv = null) {
         <label class="block text-xs font-bold text-gray-400 uppercase mb-1">Type</label>
         <select id="inv-type"
           class="w-full p-3 border rounded-lg focus:ring-2 focus:ring-orange-500 outline-none">
-          ${['LP', 'GP', 'JV', 'KP'].map(t => `<option ${t === type ? 'selected' : ''}>${escapeHtml(t)}</option>`).join('')}
+          ${['LP', 'GP', 'JV'].map(t => `<option ${t === type ? 'selected' : ''}>${escapeHtml(t)}</option>`).join('')}
         </select>
       </div>
 

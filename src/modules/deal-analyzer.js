@@ -1,257 +1,598 @@
 /**
  * src/modules/deal-analyzer.js
- * Specialized module for real estate underwriting and financial modeling.
+ * Deal Analyzer view + spreadsheet import (ADPI Basic Analyzer w Deal Summary).
+ *
+ * Behavior:
+ * - Upload spreadsheet -> populate analyzer inputs (NO auto-save)
+ * - Run Analysis -> calculates core metrics in this view
+ * - Save to Deals -> saves to Deals pipeline when you choose
  */
 
-import { formatters } from '../utils/formatters.js';
 import { stateManager } from '../state.js';
+import { router } from '../router.js';
+import { modalManager } from '../utils/modals.js';
+import { formatters } from '../utils/formatters.js';
+
+function escapeHtml(s) {
+  return String(s ?? '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#039;');
+}
 
 function toNumber(v, fallback = 0) {
-  const n = parseFloat(v);
+  const n = parseFloat(String(v ?? '').replaceAll(',', ''));
   return Number.isFinite(n) ? n : fallback;
 }
 
-function normalizeRate(v, fallback) {
-  // Accepts 0.08 or 8 (meaning 8%). Converts >1 to percent form.
+function toInt(v, fallback = 0) {
+  const n = parseInt(String(v ?? ''), 10);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function normalizeRate(v, fallback = 0) {
   let r = toNumber(v, fallback);
   if (r > 1) r = r / 100;
   return r;
 }
 
-function normalizePositive(v, fallback) {
-  const n = toNumber(v, fallback);
-  return n > 0 ? n : fallback;
+function getXLSX() {
+  return window.XLSX;
+}
+
+function readCell(ws, addr) {
+  try {
+    const cell = ws?.[addr];
+    if (!cell) return null;
+    return cell.v ?? cell.w ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function firstNonEmpty(...vals) {
+  for (const v of vals) {
+    if (v === 0) return v;
+    if (v === null || v === undefined) continue;
+    const s = String(v).trim();
+    if (s) return v;
+  }
+  return null;
+}
+
+function findSheet(wb, ...names) {
+  const list = wb?.SheetNames || [];
+  for (const n of names) {
+    if (list.includes(n)) return wb.Sheets[n];
+  }
+  for (const n of names) {
+    const hit = list.find(x => String(x).toLowerCase() === String(n).toLowerCase());
+    if (hit) return wb.Sheets[hit];
+  }
+  return null;
+}
+
+function searchLabel(ws, labelText, { rowLimit = 140, colLimit = 26, offsetCols = 1 } = {}) {
+  const XLSX = getXLSX();
+  if (!XLSX || !ws?.['!ref']) return null;
+
+  const label = String(labelText ?? '').trim().toLowerCase();
+  if (!label) return null;
+
+  const range = XLSX.utils.decode_range(ws['!ref']);
+  const rMax = Math.min(range.e.r, rowLimit - 1);
+  const cMax = Math.min(range.e.c, colLimit - 1);
+
+  for (let r = range.s.r; r <= rMax; r++) {
+    for (let c = range.s.c; c <= cMax; c++) {
+      const addr = XLSX.utils.encode_cell({ r, c });
+      const v = readCell(ws, addr);
+      if (!v) continue;
+      const txt = String(v).trim().toLowerCase();
+      if (txt === label || txt.includes(label)) {
+        const target = XLSX.utils.encode_cell({ r, c: c + offsetCols });
+        return readCell(ws, target);
+      }
+    }
+  }
+  return null;
+}
+
+function money(n) {
+  return formatters?.dollars ? formatters.dollars(toNumber(n, 0)) : `$${toNumber(n, 0).toLocaleString()}`;
 }
 
 export const dealAnalyzer = {
   _bound: false,
-  _activeDealId: null,
+  _lastState: null,
 
-  _getSelectedDealId() {
-    // Deals list sets this when clicking "Analyze"
-    try {
-      const id = sessionStorage.getItem('selected_deal_id');
-      return id ? String(id) : null;
-    } catch (_) {
-      return null;
-    }
+  // Draft values currently shown in the analyzer (from import or manual edits)
+  _draft: {
+    name: '',
+    address: '',
+    units: 0,
+    purchase_price: 0,
+    annual_gross_income: 0,
+    annual_expenses: 0,
+    annual_debt_service: 0,
+    total_capex: 0,
+    loan_amount: 0
   },
 
-  _escapeHtml(s) {
-    return String(s ?? '')
-      .replaceAll('&', '&amp;')
-      .replaceAll('<', '&lt;')
-      .replaceAll('>', '&gt;')
-      .replaceAll('"', '&quot;')
-      .replaceAll("'", '&#039;');
-  },
+  _analysis: null,
+  _lastSavedDealId: null,
 
-  _prefillValue(deal, keys, fallback = '') {
-    for (const k of keys) {
-      const v = deal?.[k];
-      if (v !== undefined && v !== null && String(v).trim() !== '') return v;
-    }
-    return fallback;
-  },
-
-  _bindOnce() {
-    if (this._bound) return;
-    this._bound = true;
-
-    document.addEventListener('click', (e) => {
-      const btn = e.target.closest('[data-action]');
-      if (!btn) return;
-      if (btn.dataset.action !== 'deal-analyzer-run') return;
-
-      const container = document.getElementById('view-deal-analyzer');
-      if (!container) return;
-
-      const dealId = btn.dataset.dealId || this._getSelectedDealId();
-      const state = stateManager.get();
-      const deal = (state.deals || []).find(d => String(d.id) === String(dealId));
-      if (!deal) return;
-
-      const form = container.querySelector('#dealAnalyzerForm');
-      if (!form) return;
-
-      // Read inputs
-      const patch = {
-        purchase_price: toNumber(form.querySelector('#da_purchase_price')?.value, 0),
-        annual_gross_income: toNumber(form.querySelector('#da_annual_gross_income')?.value, 0),
-        annual_expenses: toNumber(form.querySelector('#da_annual_expenses')?.value, 0),
-        annual_debt_service: toNumber(form.querySelector('#da_annual_debt_service')?.value, 0),
-        total_capex: toNumber(form.querySelector('#da_total_capex')?.value, 0),
-        loan_amount: toNumber(form.querySelector('#da_loan_amount')?.value, 0)
-      };
-
-      // Persist analyzer fields onto the deal (non-destructive; these keys are analyzer-specific)
-      stateManager.update('deals', deal.id, patch);
-
-      // Render results immediately
-      const nextState = stateManager.get();
-      this.render(nextState);
-    });
-
-    // If a deal is selected from the Deals view, re-render analyzer
-    window.addEventListener('deal-analyzer:select', (e) => {
-      const id = e?.detail?.id;
-      if (!id) return;
-      this._activeDealId = String(id);
-      this.render(stateManager.get());
-    });
-  },
-
-  /**
-   * Renders the Deal Analyzer View.
-   * Shows a simple underwriting form + computed outputs.
-   */
-  render(state = stateManager.get()) {
-    this._bindOnce();
-
+  render(state) {
     const container = document.getElementById('view-deal-analyzer');
     if (!container) return;
 
-    const selectedId = this._activeDealId || this._getSelectedDealId();
-    const deal = (state.deals || []).find(d => String(d.id) === String(selectedId));
+    this._lastState = state;
 
-    if (!deal) {
-      container.innerHTML = `
-        <div class="p-6 max-w-5xl mx-auto">
-          <div class="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
-            <h2 class="text-xl font-black text-slate-900 italic tracking-tight">Deal Analyzer</h2>
-            <p class="text-sm text-slate-500 font-semibold mt-1">Select a deal from the Deals tab and click <span class="font-black">Analyze</span>.</p>
+    const d = this._draft || {};
+    const a = this._analysis;
+
+    container.innerHTML = `
+      <div class="p-6 max-w-5xl mx-auto">
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+          <div>
+            <h2 class="text-2xl font-black text-slate-900 tracking-tight">Deal Analyzer</h2>
+            <p class="text-sm text-slate-500 font-medium">
+              Upload your ADPI spreadsheet to populate inputs, then run analysis. Use <span class="font-black">Save to Deals</span> when ready.
+            </p>
+          </div>
+
+          <div class="flex flex-wrap gap-2">
+            <button data-action="da-upload" class="bg-slate-900 text-white px-4 py-2.5 rounded-xl hover:bg-slate-800 font-bold shadow-sm transition-all text-sm">
+              <i class="fa fa-file-arrow-up mr-2"></i>Upload Spreadsheet
+            </button>
+            <button data-action="da-run" class="bg-white border border-slate-200 text-slate-900 px-4 py-2.5 rounded-xl hover:bg-slate-50 font-bold shadow-sm transition-all text-sm">
+              <i class="fa fa-bolt mr-2"></i>Run Analysis
+            </button>
+            <button data-action="da-save" class="bg-orange-600 text-white px-4 py-2.5 rounded-xl hover:bg-orange-700 font-bold shadow-sm transition-all text-sm">
+              <i class="fa fa-floppy-disk mr-2"></i>Save to Deals
+            </button>
+            <button data-action="da-go-deals" class="bg-white border border-slate-200 text-slate-800 px-4 py-2.5 rounded-xl hover:bg-slate-50 font-bold shadow-sm transition-all text-sm">
+              <i class="fa fa-briefcase mr-2"></i>Go to Deals
+            </button>
           </div>
         </div>
-      `;
+
+        <input id="da-xlsx" type="file" accept=".xlsx,.xls" class="hidden" />
+
+        <div class="grid grid-cols-1 lg:grid-cols-5 gap-6">
+          <div class="lg:col-span-3 bg-white border border-slate-200 rounded-2xl shadow-sm p-5">
+            <div class="flex items-center justify-between gap-4 mb-4">
+              <div>
+                <div class="text-[10px] font-black uppercase tracking-widest text-slate-400">Inputs</div>
+                <div class="text-sm font-semibold text-slate-600">Edit anything after import.</div>
+              </div>
+              ${this._lastSavedDealId ? `
+                <button data-action="da-open-saved" class="text-sm font-black text-orange-600 hover:text-orange-700">
+                  Open saved deal <i class="fa fa-arrow-right ml-1"></i>
+                </button>
+              ` : ''}
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div class="md:col-span-2">
+                <label class="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Deal / Property Name</label>
+                <input id="da-name" type="text" value="${escapeHtml(d.name || '')}" placeholder="e.g. Aspen Ridge Apartments"
+                  class="w-full px-4 py-2.5 rounded-xl border border-slate-200 bg-white text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-slate-900/10" />
+              </div>
+
+              <div class="md:col-span-2">
+                <label class="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Address</label>
+                <input id="da-address" type="text" value="${escapeHtml(d.address || '')}" placeholder="123 Main St, City, ST"
+                  class="w-full px-4 py-2.5 rounded-xl border border-slate-200 bg-white text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-slate-900/10" />
+              </div>
+
+              <div>
+                <label class="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Units</label>
+                <input id="da-units" type="number" inputmode="numeric" value="${toInt(d.units, 0)}"
+                  class="w-full px-4 py-2.5 rounded-xl border border-slate-200 bg-white text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-slate-900/10" />
+              </div>
+
+              <div>
+                <label class="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Purchase Price</label>
+                <input id="da-purchase_price" type="number" inputmode="decimal" value="${toNumber(d.purchase_price, 0)}"
+                  class="w-full px-4 py-2.5 rounded-xl border border-slate-200 bg-white text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-slate-900/10" />
+              </div>
+
+              <div>
+                <label class="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Annual Gross Income (Yr 1)</label>
+                <input id="da-annual_gross_income" type="number" inputmode="decimal" value="${toNumber(d.annual_gross_income, 0)}"
+                  class="w-full px-4 py-2.5 rounded-xl border border-slate-200 bg-white text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-slate-900/10" />
+              </div>
+
+              <div>
+                <label class="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Annual Operating Expenses (Yr 1)</label>
+                <input id="da-annual_expenses" type="number" inputmode="decimal" value="${toNumber(d.annual_expenses, 0)}"
+                  class="w-full px-4 py-2.5 rounded-xl border border-slate-200 bg-white text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-slate-900/10" />
+              </div>
+
+              <div>
+                <label class="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Annual Debt Service (Yr 1)</label>
+                <input id="da-annual_debt_service" type="number" inputmode="decimal" value="${toNumber(d.annual_debt_service, 0)}"
+                  class="w-full px-4 py-2.5 rounded-xl border border-slate-200 bg-white text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-slate-900/10" />
+              </div>
+
+              <div>
+                <label class="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Total CapEx (Rehab + WC)</label>
+                <input id="da-total_capex" type="number" inputmode="decimal" value="${toNumber(d.total_capex, 0)}"
+                  class="w-full px-4 py-2.5 rounded-xl border border-slate-200 bg-white text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-slate-900/10" />
+              </div>
+
+              <div>
+                <label class="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Loan Amount</label>
+                <input id="da-loan_amount" type="number" inputmode="decimal" value="${toNumber(d.loan_amount, 0)}"
+                  class="w-full px-4 py-2.5 rounded-xl border border-slate-200 bg-white text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-slate-900/10" />
+              </div>
+            </div>
+
+            <div class="mt-4 text-[11px] font-semibold text-slate-400">
+              Tip: Import maps the fields it can find; anything missing can be typed in before running analysis.
+            </div>
+          </div>
+
+          <div class="lg:col-span-2 space-y-6">
+            <div class="bg-white border border-slate-200 rounded-2xl shadow-sm p-5">
+              <div class="text-[10px] font-black uppercase tracking-widest text-slate-400">Results</div>
+              ${a ? `
+                <div class="grid grid-cols-2 gap-3 mt-4">
+                  <div class="bg-slate-50 rounded-xl p-3 border border-slate-100">
+                    <div class="text-[10px] font-black uppercase tracking-widest text-slate-400">NOI</div>
+                    <div class="text-sm font-black text-slate-900 mt-1">${money(a.noi)}</div>
+                  </div>
+                  <div class="bg-slate-50 rounded-xl p-3 border border-slate-100">
+                    <div class="text-[10px] font-black uppercase tracking-widest text-slate-400">Cap Rate</div>
+                    <div class="text-sm font-black text-slate-900 mt-1">${formatters.percent(a.capRate)}</div>
+                  </div>
+                  <div class="bg-slate-50 rounded-xl p-3 border border-slate-100">
+                    <div class="text-[10px] font-black uppercase tracking-widest text-slate-400">Cash Flow</div>
+                    <div class="text-sm font-black text-slate-900 mt-1">${money(a.cashFlow)}</div>
+                  </div>
+                  <div class="bg-slate-50 rounded-xl p-3 border border-slate-100">
+                    <div class="text-[10px] font-black uppercase tracking-widest text-slate-400">Cash-on-Cash</div>
+                    <div class="text-sm font-black text-slate-900 mt-1">${formatters.percent(a.cashOnCash)}</div>
+                  </div>
+                  <div class="bg-slate-50 rounded-xl p-3 border border-slate-100">
+                    <div class="text-[10px] font-black uppercase tracking-widest text-slate-400">Total Basis</div>
+                    <div class="text-sm font-black text-slate-900 mt-1">${money(a.totalBasis)}</div>
+                  </div>
+                  <div class="bg-slate-50 rounded-xl p-3 border border-slate-100">
+                    <div class="text-[10px] font-black uppercase tracking-widest text-slate-400">DSCR</div>
+                    <div class="text-sm font-black text-slate-900 mt-1">${(a.debtServiceCoverage || 0).toFixed(2)}x</div>
+                  </div>
+                </div>
+
+                <div class="mt-4 text-[11px] font-semibold text-slate-500">
+                  Equity Required: <span class="font-black text-slate-900">${money(a.equityRequired)}</span>
+                </div>
+              ` : `
+                <div class="mt-3 text-sm font-semibold text-slate-500">
+                  No analysis yet. Click <span class="font-black">Run Analysis</span>.
+                </div>
+              `}
+            </div>
+
+            <div class="bg-white border border-slate-200 rounded-2xl shadow-sm p-5">
+              <div class="text-[10px] font-black uppercase tracking-widest text-slate-400">Import status</div>
+              <div class="mt-2 text-sm font-semibold text-slate-600">
+                ${d._importedFrom ? `Loaded from: <span class="font-black">${escapeHtml(d._importedFrom)}</span>` : 'No spreadsheet imported yet.'}
+              </div>
+              <div class="mt-3 text-[11px] font-semibold text-slate-400">
+                If Upload does nothing, confirm the XLSX script is loading and you selected a .xlsx file.
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+
+    this.bindEvents();
+  },
+
+  bindEvents() {
+    const container = document.getElementById('view-deal-analyzer');
+    if (!container) return;
+
+    const input = document.getElementById('da-xlsx');
+    if (input) {
+      input.onchange = async (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        // allow selecting same file twice
+        e.target.value = '';
+        await this.importSpreadsheet(file);
+      };
+    }
+
+    if (this._bound) return;
+    this._bound = true;
+
+    container.addEventListener('click', async (e) => {
+      const btn = e.target.closest('[data-action]');
+      if (!btn) return;
+      const action = btn.dataset.action;
+
+      if (action === 'da-upload') {
+        document.getElementById('da-xlsx')?.click();
+        return;
+      }
+
+      if (action === 'da-run') {
+        this.runAnalysisFromDom();
+        return;
+      }
+
+      if (action === 'da-save') {
+        await this.saveToDealsFromDom();
+        return;
+      }
+
+      if (action === 'da-go-deals') {
+        router.navigate('deals');
+        return;
+      }
+
+      if (action === 'da-open-saved') {
+        if (this._lastSavedDealId) sessionStorage.setItem('selected_deal_id', String(this._lastSavedDealId));
+        router.navigate('deals');
+      }
+    });
+  },
+
+  getDraftFromDom() {
+    const val = (id) => document.getElementById(id)?.value;
+    const d = {
+      ...this._draft,
+      name: String(val('da-name') ?? '').trim(),
+      address: String(val('da-address') ?? '').trim(),
+      units: toInt(val('da-units'), 0),
+      purchase_price: toNumber(val('da-purchase_price'), 0),
+      annual_gross_income: toNumber(val('da-annual_gross_income'), 0),
+      annual_expenses: toNumber(val('da-annual_expenses'), 0),
+      annual_debt_service: toNumber(val('da-annual_debt_service'), 0),
+      total_capex: toNumber(val('da-total_capex'), 0),
+      loan_amount: toNumber(val('da-loan_amount'), 0)
+    };
+    this._draft = d;
+    return d;
+  },
+
+  runAnalysisFromDom() {
+    const d = this.getDraftFromDom();
+    this._analysis = this.analyze(d);
+    // Re-render to update results card (no state change trigger)
+    this.render(this._lastState || stateManager.get());
+  },
+
+  async saveToDealsFromDom() {
+    const d = this.getDraftFromDom();
+
+    if (!d.name) {
+      modalManager.alert({ title: 'Missing info', message: 'Please enter a Deal / Property Name before saving.' });
       return;
     }
 
-    // Prefill with analyzer-specific keys first, then fall back to legacy deal keys.
-    const vPurchase = this._prefillValue(deal, ['purchase_price', 'price', 'purchasePrice'], '');
-    const vIncome = this._prefillValue(deal, ['annual_gross_income', 'gross_income', 'annual_income', 'grossIncome'], '');
-    const vExpenses = this._prefillValue(deal, ['annual_expenses', 'expenses', 'annualExpense'], '');
-    const vDebt = this._prefillValue(deal, ['annual_debt_service', 'debt_service', 'annualDebtService'], '');
-    const vCapex = this._prefillValue(deal, ['total_capex', 'rehab', 'capex', 'totalCapex'], '');
-    const vLoan = this._prefillValue(deal, ['loan_amount', 'loan', 'loanAmount'], '');
+    // Recommended: run analysis first so equity required etc is computed
+    if (!this._analysis) {
+      this._analysis = this.analyze(d);
+    }
 
-    const metrics = this.analyze(deal);
+    const dealToSave = this.buildPipelineDeal(d, this._analysis);
 
-    container.innerHTML = `
-      <div class="p-6 max-w-6xl mx-auto space-y-6">
-        <div class="flex flex-col md:flex-row md:items-end md:justify-between gap-3">
-          <div>
-            <h2 class="text-2xl font-black text-slate-900 italic tracking-tight">Deal Analyzer</h2>
-            <p class="text-sm text-slate-500 font-semibold">Underwrite quickly, then save inputs back to the deal.</p>
-          </div>
-          <div class="text-right">
-            <div class="text-sm font-black text-slate-900">${this._escapeHtml(deal?.name || 'Unnamed Deal')}</div>
-            <div class="text-xs font-semibold text-slate-500">${this._escapeHtml(deal?.address || '')}</div>
-          </div>
-        </div>
+    await stateManager.add('deals', dealToSave);
 
-        <div class="grid grid-cols-1 lg:grid-cols-5 gap-6">
-          <div class="lg:col-span-2 bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
-            <div class="flex items-center justify-between mb-3">
-              <div class="text-sm font-black text-slate-900">Inputs</div>
-              <button data-action="deal-analyzer-run" data-deal-id="${this._escapeHtml(deal.id)}"
-                class="px-4 py-2 rounded-xl bg-orange-600 text-white text-sm font-black hover:bg-orange-700">
-                Run analysis
-              </button>
-            </div>
+    const newDeal = (stateManager.get()?.deals || [])[0] || null;
+    if (newDeal?.id) {
+      this._lastSavedDealId = newDeal.id;
+      sessionStorage.setItem('selected_deal_id', String(newDeal.id));
+    }
 
-            <form id="dealAnalyzerForm" class="space-y-3">
-              ${this._inputRow('Purchase price', 'da_purchase_price', vPurchase, 'e.g. 2500000')}
-              ${this._inputRow('Annual gross income', 'da_annual_gross_income', vIncome, 'e.g. 420000')}
-              ${this._inputRow('Annual expenses', 'da_annual_expenses', vExpenses, 'e.g. 160000')}
-              ${this._inputRow('Annual debt service', 'da_annual_debt_service', vDebt, 'e.g. 210000')}
-              ${this._inputRow('Total CapEx', 'da_total_capex', vCapex, 'e.g. 350000')}
-              ${this._inputRow('Loan amount', 'da_loan_amount', vLoan, 'e.g. 1750000')}
-            </form>
+    modalManager.alert({
+      title: 'Saved to Deals',
+      message: `Added “${d.name}” to Deals (stage: ${dealToSave.stage}).`
+    });
 
-            <p class="text-[11px] font-semibold text-slate-400 mt-4">Tip: The analyzer saves these fields onto the deal so they sync with Firestore.</p>
-          </div>
-
-          <div class="lg:col-span-3 space-y-6">
-            <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
-              ${this._metricCard('Cap Rate', formatters.percent(metrics.capRate))}
-              ${this._metricCard('Cash on Cash', formatters.percent(metrics.cashOnCash))}
-              ${this._metricCard('Yield on Cost', formatters.percent(metrics.yieldOnCost))}
-              ${this._metricCard('DSCR', `${metrics.debtServiceCoverage.toFixed(2)}x`)}
-            </div>
-
-            <div class="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
-              <table class="w-full text-left text-sm">
-                <thead class="bg-slate-50 border-b border-slate-200">
-                  <tr>
-                    <th class="px-4 py-3 font-black text-slate-700">Line item</th>
-                    <th class="px-4 py-3 font-black text-slate-700 text-right">Annual value</th>
-                  </tr>
-                </thead>
-                <tbody class="divide-y divide-slate-100">
-                  <tr>
-                    <td class="px-4 py-3 text-slate-600">Net Operating Income (NOI)</td>
-                    <td class="px-4 py-3 text-right font-black text-slate-900">${formatters.dollars(metrics.noi)}</td>
-                  </tr>
-                  <tr>
-                    <td class="px-4 py-3 text-slate-600">Annual Debt Service</td>
-                    <td class="px-4 py-3 text-right font-black text-red-600">(${formatters.dollars(toNumber(deal.annual_debt_service, 0))})</td>
-                  </tr>
-                  <tr class="bg-emerald-50/30">
-                    <td class="px-4 py-3 font-black text-emerald-900">Net Cash Flow</td>
-                    <td class="px-4 py-3 text-right font-black text-emerald-700">${formatters.dollars(metrics.cashFlow)}</td>
-                  </tr>
-                  <tr>
-                    <td class="px-4 py-3 text-slate-600">Total Basis</td>
-                    <td class="px-4 py-3 text-right font-black text-slate-900">${formatters.dollars(metrics.totalBasis)}</td>
-                  </tr>
-                  <tr>
-                    <td class="px-4 py-3 text-slate-600">Equity Required</td>
-                    <td class="px-4 py-3 text-right font-black text-blue-700">${formatters.dollars(metrics.equityRequired)}</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-      </div>
-    `;
+    // Stay in Deal Analyzer (your request)
+    this.render(this._lastState || stateManager.get());
   },
 
-  _inputRow(label, id, value, placeholder = '') {
-    return `
-      <div>
-        <label class="block text-xs font-black text-slate-600 mb-1">${this._escapeHtml(label)}</label>
-        <input id="${this._escapeHtml(id)}" type="number" inputmode="decimal" step="any"
-          value="${this._escapeHtml(value)}" placeholder="${this._escapeHtml(placeholder)}"
-          class="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-semibold outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 transition-all" />
-      </div>
-    `;
+  async importSpreadsheet(file) {
+    const XLSX = getXLSX();
+    if (!XLSX) {
+      modalManager.alert({
+        title: 'Spreadsheet import not available',
+        message: 'The XLSX library did not load. Ensure the XLSX script is included in index.html.'
+      });
+      return;
+    }
+
+    try {
+      const buffer = await file.arrayBuffer();
+      const wb = XLSX.read(buffer, { type: 'array' });
+
+      const extracted = this.extractFromWorkbook(wb);
+      if (!extracted?.name && !extracted?.purchase_price) {
+        modalManager.alert({
+          title: 'Import failed',
+          message: 'Could not locate expected fields. Make sure you are using your “ADPI Basic Analyzer w Deal Summary” workbook.'
+        });
+        return;
+      }
+
+      this._draft = {
+        ...this._draft,
+        ...extracted,
+        _importedFrom: file?.name || 'Spreadsheet'
+      };
+
+      // Clear old results; user will run analysis
+      this._analysis = null;
+
+      modalManager.alert({
+        title: 'Spreadsheet loaded',
+        message: 'Inputs were populated. Review/adjust fields and click Run Analysis.'
+      });
+
+      this.render(this._lastState || stateManager.get());
+    } catch (err) {
+      console.error('Spreadsheet import failed', err);
+      modalManager.alert({
+        title: 'Import failed',
+        message: 'There was an error reading that file. Try re-exporting the XLSX or using the original workbook.'
+      });
+    }
   },
 
-  _metricCard(label, value) {
-    return `
-      <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
-        <p class="text-[10px] text-slate-500 font-black uppercase tracking-wider mb-1">${this._escapeHtml(label)}</p>
-        <p class="text-2xl font-black text-slate-900">${this._escapeHtml(value)}</p>
-      </div>
-    `;
+  extractFromWorkbook(wb) {
+    // Sheets from your template
+    const wsInputs = findSheet(wb, 'Inputs & Assumptions', 'Inputs and Assumptions');
+    const wsSummary = findSheet(wb, 'Deal Summary', 'Deal Summary v2 (Mockup)');
+    const wsMoney = findSheet(wb, 'The Money', 'TheMoney');
+    const wsPL = findSheet(wb, 'Profit & Loss', 'Profit and Loss');
+
+    // Name / Address
+    const name = firstNonEmpty(
+      readCell(wsInputs, 'C11'),
+      readCell(wsSummary, 'C10'),
+      searchLabel(wsInputs, 'Property Name'),
+      searchLabel(wsSummary, 'Property Name')
+    );
+
+    const address = firstNonEmpty(
+      readCell(wsInputs, 'C12'),
+      searchLabel(wsInputs, 'Address'),
+      readCell(wsSummary, 'C4')
+    );
+
+    // Units
+    const units = toInt(firstNonEmpty(
+      readCell(wsSummary, 'C11'),
+      readCell(wsInputs, 'C30'),
+      searchLabel(wsSummary, 'Number of Units'),
+      searchLabel(wsInputs, 'Total Units')
+    ), 0);
+
+    // Purchase / Offer price
+    const purchase_price = toNumber(firstNonEmpty(
+      readCell(wsSummary, 'C14'),
+      readCell(wsInputs, 'C19'),
+      searchLabel(wsSummary, 'Offer Price'),
+      searchLabel(wsSummary, '(Your) Offer Price'),
+      searchLabel(wsInputs, 'Purchase Price')
+    ), 0);
+
+    // Income / Expenses / Debt service (Year 1)
+    const annual_gross_income = toNumber(firstNonEmpty(
+      readCell(wsPL, 'D18'),
+      searchLabel(wsPL, 'Gross Operating Income'),
+      searchLabel(wsPL, 'Gross Operating Income Year 1'),
+      searchLabel(wsSummary, 'Gross Operating Income')
+    ), 0);
+
+    const annual_expenses = toNumber(firstNonEmpty(
+      readCell(wsPL, 'D45'),
+      searchLabel(wsPL, 'Total Operating Expenses'),
+      searchLabel(wsPL, 'Operating Expenses')
+    ), 0);
+
+    const annual_debt_service = toNumber(firstNonEmpty(
+      readCell(wsPL, 'D56'),
+      searchLabel(wsPL, 'Debt Service'),
+      searchLabel(wsPL, 'Annual Debt Service')
+    ), 0);
+
+    // CapEx (Renovations + Working Capital)
+    const renovations = toNumber(firstNonEmpty(
+      readCell(wsMoney, 'C27'),
+      searchLabel(wsMoney, 'Renovations')
+    ), 0);
+
+    const workingCap = toNumber(firstNonEmpty(
+      readCell(wsMoney, 'C28'),
+      searchLabel(wsMoney, 'Working Capital'),
+      searchLabel(wsMoney, 'Working cap')
+    ), 0);
+
+    const total_capex = renovations + workingCap;
+
+    // Loan amount
+    const loan_amount = toNumber(firstNonEmpty(
+      readCell(wsMoney, 'C12'),
+      readCell(wsSummary, 'F10'),
+      searchLabel(wsMoney, 'Amount Financed'),
+      searchLabel(wsSummary, 'Loan Amount')
+    ), 0);
+
+    return {
+      name: String(name ?? '').trim(),
+      address: String(address ?? '').trim(),
+      units,
+      purchase_price,
+      annual_gross_income,
+      annual_expenses,
+      annual_debt_service,
+      total_capex,
+      loan_amount
+    };
+  },
+
+  buildPipelineDeal(draft, analysis) {
+    const name = String(draft?.name || 'Imported Deal').trim();
+    const address = String(draft?.address || '').trim();
+    const units = toInt(draft?.units, 0);
+
+    const purchase = toNumber(draft?.purchase_price, 0);
+    const capex = toNumber(draft?.total_capex, 0);
+
+    // Deals pipeline fields
+    const price = purchase;
+    const rehab = capex;
+    const proforma_noi = toNumber(analysis?.noi, 0);
+
+    return {
+      name,
+      address,
+      units,
+      price,
+      rehab,
+      closing_costs: 0,
+      proforma_noi,
+
+      // Preserve analyzer fields so analysis can be reproduced later
+      purchase_price: purchase,
+      annual_gross_income: toNumber(draft?.annual_gross_income, 0),
+      annual_expenses: toNumber(draft?.annual_expenses, 0),
+      annual_debt_service: toNumber(draft?.annual_debt_service, 0),
+      total_capex: capex,
+      loan_amount: toNumber(draft?.loan_amount, 0),
+
+      stage: 'Underwriting'
+    };
   },
 
   /**
-   * Calculates the core metrics for a deal.
+   * Calculates the core metrics for a deal/draft.
+   * Accepts either analyzer-style keys or pipeline-style keys.
    */
   analyze(deal) {
-    const purchasePrice = toNumber(deal.purchase_price, 0);
-    const grossIncome = toNumber(deal.annual_gross_income, 0);
-    const expenses = toNumber(deal.annual_expenses, 0);
-    const debtService = toNumber(deal.annual_debt_service, 0);
-    const totalCapEx = toNumber(deal.total_capex, 0);
-    const loanAmount = toNumber(deal.loan_amount, 0);
+    const purchasePrice = firstNonEmpty(deal?.purchase_price, deal?.price);
+    const purchase = toNumber(purchasePrice, 0);
 
-    // Core Calculations
+    const grossIncome = toNumber(deal?.annual_gross_income, 0);
+    const expenses = toNumber(deal?.annual_expenses, 0);
+    const debtService = toNumber(deal?.annual_debt_service, 0);
+
+    const totalCapEx = toNumber(firstNonEmpty(deal?.total_capex, deal?.rehab), 0);
+    const loanAmount = toNumber(deal?.loan_amount, 0);
+
     const noi = grossIncome - expenses;
     const cashFlow = noi - debtService;
-    const totalBasis = purchasePrice + totalCapEx;
+    const totalBasis = purchase + totalCapEx;
     const equityRequired = totalBasis - loanAmount;
 
     return {
@@ -259,7 +600,7 @@ export const dealAnalyzer = {
       cashFlow,
       totalBasis,
       equityRequired,
-      capRate: purchasePrice > 0 ? (noi / purchasePrice) : 0,
+      capRate: purchase > 0 ? (noi / purchase) : 0,
       cashOnCash: equityRequired > 0 ? (cashFlow / equityRequired) : 0,
       yieldOnCost: totalBasis > 0 ? (noi / totalBasis) : 0,
       ltc: totalBasis > 0 ? (loanAmount / totalBasis) : 0,
@@ -269,43 +610,26 @@ export const dealAnalyzer = {
 
   /**
    * Waterfall Distribution Logic (Standard Pref + Promote)
-   * Note: This is a simplified model:
-   * - Pref is calculated as SIMPLE (non-compounding) over "Hold Years"
-   * - Does not model return of capital tiers or IRR hurdles
-   *
-   * @param {number} profit - Total distributable profit (over the hold period)
-   * @param {object} terms - { pref_rate, gp_split, hold_years, ... }
-   * @param {number} investedCapital - LP invested capital (or total capital base for pref calc)
    */
   calculateWaterfall(profit, terms = {}, investedCapital = 0) {
     const totalProfit = toNumber(profit, 0);
     const capital = toNumber(investedCapital, 0);
 
-    // Normalize inputs (accept 8 or 0.08)
     const prefRate = normalizeRate(terms.pref_rate, 0.08);
     const gpSplit = normalizeRate(terms.gp_split, 0.20);
+    const holdYears = toNumber(terms.hold_years, 5) > 0 ? toNumber(terms.hold_years, 5) : 5;
 
-    // Hold years (default 5). Allows decimals (e.g., 3.5 years)
-    const holdYears = normalizePositive(terms.hold_years, 5);
-
-    // 1) Preferred Return amount over hold period (simple pref)
     const prefAccrual = capital * prefRate * holdYears;
-
-    // Pay pref first (up to available profit)
     const prefPayment = Math.min(totalProfit, prefAccrual);
 
-    // 2) Split remaining profit as promote
     const remaining = Math.max(0, totalProfit - prefPayment);
     const gpPromote = remaining * gpSplit;
     const lpShare = remaining - gpPromote;
 
     return {
-      // Totals
       lpTotal: prefPayment + lpShare,
       gpTotal: gpPromote,
       totalProfit,
-
-      // Diagnostics (helps UI/debugging; safe additive fields)
       holdYears,
       prefRate,
       gpSplit,
@@ -317,7 +641,7 @@ export const dealAnalyzer = {
   },
 
   /**
-   * Renders the Analysis Card in the Deal View
+   * Renders the Analysis Card in the Deal View (if you wire it in)
    */
   renderAnalysis(dealId, state) {
     const deal = state.deals?.find(d => String(d.id) === String(dealId));
@@ -346,39 +670,6 @@ export const dealAnalyzer = {
               <p class="text-[10px] text-orange-600 font-bold uppercase tracking-wider mb-1">DSCR</p>
               <p class="text-2xl font-black text-orange-900">${metrics.debtServiceCoverage.toFixed(2)}x</p>
             </div>
-          </div>
-
-          <div class="bg-white border border-gray-200 rounded-xl overflow-hidden">
-            <table class="w-full text-left text-sm">
-              <thead class="bg-gray-50 border-b border-gray-200">
-                <tr>
-                  <th class="px-4 py-3 font-bold text-gray-700">Financial Line Item</th>
-                  <th class="px-4 py-3 font-bold text-gray-700 text-right">Annual Value</th>
-                </tr>
-              </thead>
-              <tbody class="divide-y divide-gray-100">
-                <tr>
-                  <td class="px-4 py-3 text-gray-600">Net Operating Income (NOI)</td>
-                  <td class="px-4 py-3 text-right font-bold text-gray-900">${formatters.dollars(metrics.noi)}</td>
-                </tr>
-                <tr>
-                  <td class="px-4 py-3 text-gray-600">Annual Debt Service</td>
-                  <td class="px-4 py-3 text-right font-bold text-red-600">(${formatters.dollars(toNumber(deal.annual_debt_service, 0))})</td>
-                </tr>
-                <tr class="bg-emerald-50/30">
-                  <td class="px-4 py-3 font-bold text-emerald-900">Net Cash Flow</td>
-                  <td class="px-4 py-3 text-right font-bold text-emerald-700">${formatters.dollars(metrics.cashFlow)}</td>
-                </tr>
-                <tr>
-                  <td class="px-4 py-3 text-gray-600">Total Basis (Cost)</td>
-                  <td class="px-4 py-3 text-right font-bold text-gray-900">${formatters.dollars(metrics.totalBasis)}</td>
-                </tr>
-                <tr>
-                  <td class="px-4 py-3 text-gray-600">Equity Requirement</td>
-                  <td class="px-4 py-3 text-right font-bold text-blue-700">${formatters.dollars(metrics.equityRequired)}</td>
-                </tr>
-              </tbody>
-            </table>
           </div>
         </div>
       `;

@@ -61,10 +61,6 @@ function getLLCs(state) {
   return Array.isArray(state?.llcs) ? state.llcs : [];
 }
 
-function llcNameByIdMap(llcs) {
-  return new Map((Array.isArray(llcs) ? llcs : []).map(l => [String(l?.id ?? ''), String(l?.name ?? '')]));
-}
-
 function computeCapRate(noi, valuation) {
   const val = toNumber(valuation, 0);
   const n = toNumber(noi, 0);
@@ -212,7 +208,7 @@ export const properties = {
     const llcId = String(f.llcId ?? '').trim();
 
     // Pre-map llc names for quick matching
-    const llcNameById = llcNameByIdMap(llcs);
+    const llcNameById = new Map(llcs.map(l => [String(l?.id ?? ''), String(l?.name ?? '')]));
 
     return list.filter((p) => {
       const name = normalizeKey(p?.name);
@@ -220,14 +216,9 @@ export const properties = {
       const llc_id = String(p?.llc_id ?? '').trim();
       const llcName = normalizeKey(llcNameById.get(llc_id) || '');
 
-      // "My LLC" (member interest) linking (new)
-      const member_llc_id = String(p?.member_llc_id ?? '').trim();
-      const member_llc = normalizeKey(p?.member_llc);
-      const memberLlcName = normalizeKey(llcNameById.get(member_llc_id) || '');
-
       // search filter
       if (q) {
-        const hay = `${name} ${owning_llc} ${llcName} ${member_llc} ${memberLlcName}`.trim();
+        const hay = `${name} ${owning_llc} ${llcName}`.trim();
         if (!hay.includes(q)) return false;
       }
 
@@ -262,7 +253,7 @@ export const properties = {
     }
 
     const llcs = getLLCs(this._lastState);
-    const llcNameById = llcNameByIdMap(llcs);
+    const llcNameById = new Map(llcs.map(l => [String(l?.id ?? ''), String(l?.name ?? '')]));
 
     return propertyList.map((prop) => {
       const id = escapeHtml(prop?.id);
@@ -279,10 +270,6 @@ export const properties = {
       const llcId = String(prop?.llc_id ?? '').trim();
       const llcName = llcNameById.get(llcId) || prop?.owning_llc || '—';
       const llcLabel = escapeHtml(llcName);
-
-      const memberId = String(prop?.member_llc_id ?? '').trim();
-      const memberName = llcNameById.get(memberId) || prop?.member_llc || '';
-      const memberLabel = memberName ? escapeHtml(memberName) : '';
 
       const occupancyColor = occ < 90 ? 'text-orange-600' : 'text-emerald-600';
 
@@ -308,16 +295,9 @@ export const properties = {
             </div>
 
             <h3 class="font-bold text-gray-900 text-lg mb-1 truncate">${name}</h3>
-            <div class="text-xs text-gray-500 mb-4">
-              <p class="truncate">
-                <i class="fa fa-landmark mr-1"></i>${llcLabel}
-              </p>
-              ${memberLabel ? `
-                <p class="truncate mt-1">
-                  <i class="fa fa-circle-nodes mr-1"></i><span class="font-semibold">Member LLC:</span> ${memberLabel}
-                </p>
-              ` : ''}
-            </div>
+            <p class="text-xs text-gray-500 mb-4 truncate">
+              <i class="fa fa-landmark mr-1"></i>${llcLabel}
+            </p>
 
             <div class="grid grid-cols-2 gap-4 border-t border-gray-50 pt-4">
               <div>
@@ -494,9 +474,7 @@ export const properties = {
 
     const name = escapeHtml(prop?.name || '');
     const llcId = String(prop?.llc_id ?? '');
-    const memberLlcId = String(prop?.member_llc_id ?? '');
     const owning = escapeHtml(prop?.owning_llc || '');
-    const memberLegacy = escapeHtml(prop?.member_llc || '');
     const valuation = toNumber(prop?.valuation, 0);
     const loan = toNumber(prop?.loan_balance, 0);
     const units = toInt(prop?.units, 0);
@@ -525,22 +503,6 @@ export const properties = {
           </select>
           <p class="text-[11px] font-semibold text-slate-400 mt-2">
             Legacy field <span class="font-black">owning_llc</span> will stay in sync automatically.
-          </p>
-        </div>
-
-        <div class="col-span-2">
-          <label class="block text-xs font-bold text-gray-400 uppercase mb-1">My LLC (Member of Owning LLC)</label>
-          <select id="prop-member-llc-id"
-            class="w-full p-3 border rounded-lg focus:ring-2 focus:ring-orange-500 outline-none">
-            <option value="">Unassigned</option>
-            ${llcs.map(l => {
-              const id = String(l?.id ?? '');
-              const sel = idEq(id, memberLlcId) ? 'selected' : '';
-              return `<option value="${escapeHtml(id)}" ${sel}>${escapeHtml(l?.name || 'Unnamed LLC')}</option>`;
-            }).join('')}
-          </select>
-          <p class="text-[11px] font-semibold text-slate-400 mt-2">
-            Optional: links your personal/member LLC to the joint owning LLC. Legacy field <span class="font-black">member_llc</span> will stay in sync.
           </p>
         </div>
 
@@ -585,9 +547,6 @@ export const properties = {
                 <div class="text-[11px] font-semibold text-slate-500">
                   Current owning_llc (legacy): <span class="font-black text-slate-900">${owning || '—'}</span>
                 </div>
-                <div class="text-[11px] font-semibold text-slate-500 mt-1">
-                  Current member_llc (legacy): <span class="font-black text-slate-900">${memberLegacy || '—'}</span>
-                </div>
               </div>`
             : ''
         }
@@ -598,20 +557,14 @@ export const properties = {
   readPropertyFormData(llcs) {
     const name = String(document.getElementById('prop-name')?.value ?? '').trim();
     const selectedLlcId = String(document.getElementById('prop-llc-id')?.value ?? '').trim();
-    const selectedMemberLlcId = String(document.getElementById('prop-member-llc-id')?.value ?? '').trim();
 
     const llc = llcs.find(l => idEq(l?.id, selectedLlcId));
     const owning_llc = llc ? String(llc.name || '').trim() : '';
-
-    const memberLlc = llcs.find(l => idEq(l?.id, selectedMemberLlcId));
-    const member_llc = memberLlc ? String(memberLlc.name || '').trim() : '';
 
     return {
       name,
       llc_id: selectedLlcId || '',
       owning_llc, // keep for legacy/back-compat
-      member_llc_id: selectedMemberLlcId || '',
-      member_llc, // keep for readability/back-compat
       valuation: toNumber(document.getElementById('prop-val')?.value, 0),
       loan_balance: toNumber(document.getElementById('prop-loan')?.value, 0),
       units: toInt(document.getElementById('prop-units')?.value, 0),
