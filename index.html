@@ -84,6 +84,9 @@
           <button data-action="nav-link" data-view="market-analysis" class="w-full flex items-center px-4 py-2.5 rounded-xl text-sm font-bold transition-all hover:text-white hover:bg-slate-800">
             <i class="fa fa-map-location-dot w-6"></i>Market Analysis
           </button>
+          <button data-action="nav-link" data-view="crexi" class="w-full flex items-center px-4 py-2.5 rounded-xl text-sm font-bold transition-all hover:text-white hover:bg-slate-800">
+            <i class="fa fa-magnifying-glass-location w-6"></i>Crexi Search
+          </button>
           <button data-action="nav-link" data-view="equity-waterfall" class="w-full flex items-center px-4 py-2.5 rounded-xl text-sm font-bold transition-all hover:text-white hover:bg-slate-800">
             <i class="fa fa-water w-6"></i>Equity Waterfall
           </button>
@@ -145,6 +148,7 @@
 
         <div id="view-deal-analyzer" class="view-container hidden"></div>
         <div id="view-market-analysis" class="view-container hidden"></div>
+        <div id="view-crexi" class="view-container hidden"></div>
         <div id="view-equity-waterfall" class="view-container hidden"></div>
 
         <div id="view-vault" class="view-container hidden"></div>
@@ -159,14 +163,12 @@
     </main>
   </div>
 
-  <!-- REQUIRED for modalManager.show() (sibling layers so modals can scroll on mobile) -->
-  <div id="modal-backdrop" class="fixed inset-0 bg-black/40 hidden z-[100]"></div>
-  <div id="modal-content" class="fixed inset-0 hidden z-[101] flex items-center justify-center p-4"></div>
+  <!-- REQUIRED for modalManager.show() -->
+  <div id="modal-backdrop" class="fixed inset-0 hidden items-center justify-center bg-black/40 z-[100] p-4">
+    <div id="modal-content" class="w-full max-w-2xl bg-white rounded-2xl shadow-2xl overflow-hidden"></div>
+  </div>
 
   <!-- IMPORTANT: only load ONCE, and from /src so imports resolve to /src/modules/... -->
-  <!-- Spreadsheet import (Deal Analyzer) -->
-  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-
   <script type="module" src="./src/main.js?v=1"></script>
 </body>
 </html>
