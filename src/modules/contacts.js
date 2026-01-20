@@ -571,3 +571,8 @@ export const contacts = {
     return 'bg-gray-50 text-gray-500';
   }
 };
+
+// Keep parity with other modules that export a named `showAdd*Modal` function
+export function showAddContactModal() {
+  return contacts.showAddContactModal();
+}
