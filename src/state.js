@@ -52,10 +52,13 @@ let state = {
   projects: [],
   vault: [],
   activities: [],
+  crexiPresets: [],
   settings: {
     companyName: "Summit Capital",
     currency: "USD",
-    theme: "light"
+    theme: "light",
+    // Crexi Search Launcher metadata (Option 1)
+    crexiPlaceLabels: {}
   },
 
   // Meta is used only for sync + conflict protection
@@ -212,6 +215,7 @@ export const stateManager = {
         state.projects = Array.isArray(state.projects) ? state.projects : [];
         state.vault = Array.isArray(state.vault) ? state.vault : [];
         state.activities = Array.isArray(state.activities) ? state.activities : [];
+        state.crexiPresets = Array.isArray(state.crexiPresets) ? state.crexiPresets : [];
 
         console.log("State synchronized with Cloud.");
       } else {

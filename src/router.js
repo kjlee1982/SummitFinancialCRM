@@ -19,6 +19,7 @@ const views = [
 
   'deal-analyzer',
   'market-analysis',
+  'crexi',
   'equity-waterfall',
 
   'vault',

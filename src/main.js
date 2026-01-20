@@ -30,6 +30,7 @@ import { calendar } from './modules/calendar.js';
 import { activity } from './modules/activity.js';
 import { dealAnalyzer } from './modules/deal-analyzer.js';
 import { marketAnalysis } from './modules/market-analysis.js';
+import { crexi } from './modules/crexi.js';
 import { equityWaterfall } from './modules/equity-waterfall.js';
 
 /**
@@ -142,6 +143,7 @@ function refreshCurrentView(view, state) {
 
     case 'deal-analyzer': dealAnalyzer.render(); break;
     case 'market-analysis': marketAnalysis.render(); break;
+    case 'crexi': crexi.render(); break;
     case 'equity-waterfall': equityWaterfall.render(); break;
 
     case 'vault': vault.render(); break;
