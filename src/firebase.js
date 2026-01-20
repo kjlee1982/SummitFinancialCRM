@@ -4,6 +4,7 @@
  */
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+console.log("Firebase projectId:", app.options.projectId);
 import { getAuth } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 import { getFirestore } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 import { getStorage } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
@@ -24,7 +25,7 @@ const app = initializeApp(firebaseConfig);
 
 // Export instances to be used by other modules
 export const auth = getAuth(app);
-export const db = getFirestore(app);
+export const db = getFirestore(app, "summitcrm");
 export const storage = getStorage(app);
 
 /**
