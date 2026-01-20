@@ -65,38 +65,34 @@ export const modalManager = {
 
     // Build the modal card
     content.innerHTML = `
-	  <div
-		class="w-full max-w-lg bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col"
-		style="max-height: calc(100vh - 2rem); max-height: calc(100dvh - 2rem);"
-		data-modal-card
-	  >
-		<div class="px-6 py-4 border-b border-slate-200 flex items-center justify-between bg-slate-50">
-		  <h3 class="text-lg font-black text-slate-900">${title || ''}</h3>
-		  <button type="button" data-modal-action="close"
-			class="w-9 h-9 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center">
-			<i class="fa fa-xmark"></i>
-		  </button>
-		</div>
+      <div class="w-full max-w-lg bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col" style="max-height: calc(100vh - 2rem); max-height: calc(100dvh - 2rem);" data-modal-card>
+        <div class="px-6 py-4 border-b border-slate-200 flex items-center justify-between bg-slate-50 flex-shrink-0">
+          <h3 class="text-lg font-black text-slate-900">${title || ''}</h3>
+          <button type="button" data-modal-action="close"
+            class="w-9 h-9 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center">
+            <i class="fa fa-xmark"></i>
+          </button>
+        </div>
 
-		<!-- THIS is the key: scrolling body -->
-		<div class="p-6 flex-1 min-h-0 overflow-y-auto">
-		  ${htmlContent || ''}
-		</div>
+        <div class="p-6 overflow-y-auto flex-1 min-h-0">
+          ${htmlContent || ''}
+        </div>
 
-		<div class="px-6 py-4 border-t border-slate-200 flex items-center justify-end gap-2 bg-white">
-		  <button type="button" data-modal-action="close"
-			class="px-4 py-2 rounded-xl bg-slate-100 text-slate-800 font-bold hover:bg-slate-200">
-			Cancel
-		  </button>
+        <div class="px-6 py-4 border-t border-slate-200 flex items-center justify-end gap-2 bg-white flex-shrink-0">
+          ${opts.hideCancel ? '' : `
+            <button type="button" data-modal-action="close"
+              class="px-4 py-2 rounded-xl bg-slate-100 text-slate-800 font-bold hover:bg-slate-200">
+              ${opts.cancelLabel || 'Cancel'}
+            </button>
+          `}
 
-		  <button type="button" data-modal-action="save"
-			class="px-4 py-2 rounded-xl bg-slate-900 text-white font-bold hover:bg-slate-800">
-			${opts.saveText || 'Save'}
-		  </button>
-		</div>
-	  </div>
-	`;
-
+          <button type="button" data-modal-action="save"
+            class="px-4 py-2 rounded-xl ${opts.danger ? 'bg-red-600 hover:bg-red-700' : 'bg-slate-900 hover:bg-slate-800'} text-white font-bold">
+            ${opts.submitLabel || opts.saveText || 'Save'}
+          </button>
+        </div>
+      </div>
+    `;
 
     // Show both layers
     showLayer(backdrop, content);
@@ -165,13 +161,13 @@ export const modalManager = {
         const res = await (onConfirm?.());
         return res !== false;
       },
-      { saveText: opts.confirmText || (danger ? 'Confirm' : 'OK') }
+      { submitLabel: opts.confirmText || (danger ? 'Confirm' : 'OK'), danger }
     );
   },
 
   alert({ title = 'Notice', message = '' } = {}) {
     const html = `<div class="text-sm text-slate-700 whitespace-pre-wrap">${message}</div>`;
-    return this.show(title, html, () => true, { saveText: 'OK' });
+    return this.show(title, html, () => true, { submitLabel: 'OK', hideCancel: true });
   },
 
   getFormData(container) {
