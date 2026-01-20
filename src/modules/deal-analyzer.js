@@ -1,15 +1,13 @@
 /**
  * src/modules/deal-analyzer.js
- * Specialized module for real estate underwriting and financial modeling.
+ * Deal Analyzer (Underwriting) + Spreadsheet Import + Save to Deals Pipeline
  *
  * Includes:
- * - Run analysis (updates analyzer fields on an existing deal OR runs on a draft)
- * - Save to Deal Pipeline (creates/updates state.deals)
- * - Spreadsheet import (XLSX/XLS/CSV) to prefill fields
- *
- * Notes:
- * - XLSX parsing uses a dynamic ESM import from jsDelivr when needed.
- * - When no deal is selected, the analyzer works in "Draft" mode until you Save to Pipeline.
+ * - Draft mode (no selected deal) stored in sessionStorage
+ * - Spreadsheet import (.xlsx/.xls/.csv) with ADPI-aware workbook scanning
+ * - Run (updates selected deal OR updates draft + results)
+ * - Save to Deals (creates/updates state.deals and navigates to 'deals')
+ * - Waterfall (simplified pref + promote) calculator panel
  */
 
 import { formatters } from '../utils/formatters.js';
@@ -20,24 +18,20 @@ function toNumber(v, fallback = 0) {
   const n = parseFloat(v);
   return Number.isFinite(n) ? n : fallback;
 }
-
 function toInt(v, fallback = 0) {
   const n = parseInt(v, 10);
   return Number.isFinite(n) ? n : fallback;
 }
-
 function normalizeRate(v, fallback) {
   // Accepts 0.08 or 8 (meaning 8%). Converts >1 to percent form.
   let r = toNumber(v, fallback);
   if (r > 1) r = r / 100;
   return r;
 }
-
 function normalizePositive(v, fallback) {
   const n = toNumber(v, fallback);
   return n > 0 ? n : fallback;
 }
-
 function safeJsonParse(str, fallback = null) {
   try { return JSON.parse(str); } catch { return fallback; }
 }
@@ -98,9 +92,9 @@ export const dealAnalyzer = {
       .replaceAll("'", '&#039;');
   },
 
-  _prefillValue(deal, keys, fallback = '') {
+  _prefillValue(obj, keys, fallback = '') {
     for (const k of keys) {
-      const v = deal?.[k];
+      const v = obj?.[k];
       if (v !== undefined && v !== null && String(v).trim() !== '') return v;
     }
     return fallback;
@@ -116,7 +110,7 @@ export const dealAnalyzer = {
     if (!form) return null;
 
     return {
-      // basic deal identity
+      // identity / pipeline
       name: String(form.querySelector('#da_name')?.value ?? '').trim(),
       address: String(form.querySelector('#da_address')?.value ?? '').trim(),
       units: toInt(form.querySelector('#da_units')?.value, 0),
@@ -129,14 +123,12 @@ export const dealAnalyzer = {
       annual_debt_service: toNumber(form.querySelector('#da_annual_debt_service')?.value, 0),
       total_capex: toNumber(form.querySelector('#da_total_capex')?.value, 0),
       loan_amount: toNumber(form.querySelector('#da_loan_amount')?.value, 0),
-
-      // optional extras if you later add them
       closing_costs: toNumber(form.querySelector('#da_closing_costs')?.value, 0)
     };
   },
 
   _pipelineFieldsFromDeal(deal) {
-    // Ensure the deal shows in the pipeline cards even if those cards use "price/rehab"
+    // Ensure the deal shows in your pipeline cards even if those cards use "price/rehab".
     const metrics = this.analyze(deal);
     return {
       name: deal.name || 'Unnamed Deal',
@@ -144,7 +136,7 @@ export const dealAnalyzer = {
       units: Number.isFinite(deal.units) ? deal.units : toInt(deal.units, 0),
       stage: deal.stage || 'Sourced',
 
-      // common pipeline aliases
+      // pipeline aliases
       price: toNumber(deal.purchase_price ?? deal.price, 0),
       rehab: toNumber(deal.total_capex ?? deal.rehab, 0),
       closing_costs: toNumber(deal.closing_costs ?? 0, 0),
@@ -155,7 +147,7 @@ export const dealAnalyzer = {
   },
 
   // -----------------------
-  // Spreadsheet import
+  // Spreadsheet import (ADPI-aware)
   // -----------------------
   async _importSpreadsheetFile(file) {
     const name = String(file?.name || '').toLowerCase();
@@ -166,21 +158,22 @@ export const dealAnalyzer = {
       return this._mapFromCsv(text);
     }
 
-    // XLSX / XLS: dynamic import
+    // XLSX / XLS: dynamic import (SheetJS)
     const buf = await file.arrayBuffer();
-
-    // ESM build of SheetJS
     const XLSX = await import('https://cdn.jsdelivr.net/npm/xlsx@0.18.5/xlsx.mjs');
 
     const wb = XLSX.read(buf, { type: 'array' });
+
+    // ADPI workbook extraction (scans multiple tabs)
+    const adpi = this._extractFromAdpiWorkbook(wb, XLSX);
+    if (Object.keys(adpi).length) return adpi;
+
+    // Fallback: generic "label/value" scan over first sheet
     const sheetName = wb.SheetNames?.[0];
     if (!sheetName) return {};
     const sheet = wb.Sheets[sheetName];
-    if (!sheet) return {};
-
-    // Read as rows
     const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: true }) || [];
-    return this._mapFromRows(rows);
+    return this._mapGenericLabelValueRows(rows);
   },
 
   _mapFromCsv(text) {
@@ -189,51 +182,179 @@ export const dealAnalyzer = {
       .map(line => line.split(',').map(x => String(x ?? '').trim()))
       .filter(r => r.some(c => c !== ''));
 
-    return this._mapFromRows(rows);
+    // CSVs are usually label/value or header-based
+    return this._mapGenericLabelValueRows(rows);
   },
 
-  _mapFromRows(rows) {
-    // Heuristic mapping:
-    // - If we see two-column "Label | Value" rows, we map those.
-    // - Otherwise, try header row mapping by column names.
+  _normLabel(s) {
+    return String(s ?? '')
+      .toLowerCase()
+      .replaceAll(':', '')
+      .replaceAll('_', ' ')
+      .replaceAll('-', ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  },
+
+  _toCleanNumber(v) {
+    if (v === null || v === undefined) return null;
+    if (typeof v === 'number') return v;
+
+    const str = String(v).trim();
+    if (!str) return null;
+
+    // strip currency/commas/parentheses
+    const cleaned = str
+      .replaceAll('$', '')
+      .replaceAll(',', '')
+      .replace(/^\((.*)\)$/, '-$1');
+
+    const n = parseFloat(cleaned);
+    return Number.isFinite(n) ? n : null;
+  },
+
+  _findLabelRightValue(rows, wantedLabels) {
+    const wanted = new Set((wantedLabels || []).map(l => this._normLabel(l)));
+    for (const row of (rows || [])) {
+      if (!row || row.length < 2) continue;
+      const a = this._normLabel(row[0]);
+      if (!wanted.has(a)) continue;
+
+      // find the first usable value to the right
+      for (let i = 1; i < row.length; i++) {
+        const v = row[i];
+        if (v === null || v === undefined || String(v).trim() === '') continue;
+        return v;
+      }
+    }
+    return null;
+  },
+
+  _sheetRows(wb, XLSX, sheetName) {
+    const s = wb.Sheets?.[sheetName];
+    if (!s) return null;
+    return XLSX.utils.sheet_to_json(s, { header: 1, raw: true }) || [];
+  },
+
+  _extractFromAdpiWorkbook(wb, XLSX) {
+    // Pull values from known ADPI tabs when present.
     const out = {};
 
-    const norm = (s) =>
-      String(s ?? '')
-        .toLowerCase()
-        .replaceAll(':', '')
-        .replaceAll('_', ' ')
-        .replaceAll('-', ' ')
-        .replace(/\s+/g, ' ')
-        .trim();
+    const rowsDealSummaryV2 =
+      this._sheetRows(wb, XLSX, 'Deal Summary v2 (Mockup)') ||
+      this._sheetRows(wb, XLSX, 'Deal Summary');
 
-    const toVal = (v) => {
-      if (v === null || v === undefined) return '';
-      // strip $, commas for numbers
-      if (typeof v === 'string') {
-        const cleaned = v.replaceAll('$', '').replaceAll(',', '').trim();
-        const n = parseFloat(cleaned);
-        return Number.isFinite(n) ? n : v.trim();
-      }
-      return v;
-    };
+    const rowsDealSummary = this._sheetRows(wb, XLSX, 'Deal Summary');
+    const rowsInputs = this._sheetRows(wb, XLSX, 'Inputs & Assumptions');
+    const rowsPL = this._sheetRows(wb, XLSX, 'Profit & Loss');
+    const rowsMoney = this._sheetRows(wb, XLSX, 'The Money');
 
+    // Identity
+    if (rowsDealSummaryV2) {
+      const propName = this._findLabelRightValue(rowsDealSummaryV2, ['Property Name', 'Property', 'Deal Name', 'Name']);
+      const location = this._findLabelRightValue(rowsDealSummaryV2, ['Location', 'Address', 'Property Address']);
+      const unitCount = this._findLabelRightValue(rowsDealSummaryV2, ['Unit Count', 'Total Units', 'Units']);
+
+      if (propName) out.name = String(propName).trim();
+      if (location) out.address = String(location).trim();
+      const u = this._toCleanNumber(unitCount);
+      if (u !== null) out.units = u;
+    }
+
+    // Purchase price / offer
+    if (rowsInputs) {
+      const purchase = this._findLabelRightValue(rowsInputs, ['Purchase Price', 'Offer Price', 'Asking Price', 'Price']);
+      const n = this._toCleanNumber(purchase);
+      if (n !== null) out.purchase_price = n;
+    }
+    if (out.purchase_price == null && rowsDealSummaryV2) {
+      const offer = this._findLabelRightValue(rowsDealSummaryV2, ['Offer Price', 'Purchase Price']);
+      const n = this._toCleanNumber(offer);
+      if (n !== null) out.purchase_price = n;
+    }
+
+    // Loan amount
+    if (rowsDealSummary) {
+      const loan = this._findLabelRightValue(rowsDealSummary, ['Loan Amount', 'Senior Debt', 'Debt']);
+      const n = this._toCleanNumber(loan);
+      if (n !== null) out.loan_amount = n;
+    }
+    if (out.loan_amount == null && rowsDealSummaryV2) {
+      const seniorDebt = this._findLabelRightValue(rowsDealSummaryV2, ['Senior Debt', 'Loan Amount']);
+      const n = this._toCleanNumber(seniorDebt);
+      if (n !== null) out.loan_amount = n;
+    }
+
+    // CapEx + Closing Costs
+    if (rowsMoney) {
+      const reno = this._findLabelRightValue(rowsMoney, ['Renovations', 'CapEx', 'Rehab', 'Renovation Budget', 'Total CapEx']);
+      const closing = this._findLabelRightValue(rowsMoney, ['Closing cost', 'Closing costs', 'Closing Cost', 'Closing Costs']);
+
+      const r = this._toCleanNumber(reno);
+      if (r !== null) out.total_capex = r;
+
+      const c = this._toCleanNumber(closing);
+      if (c !== null) out.closing_costs = c;
+    }
+
+    // Income + Expenses (Profit & Loss)
+    if (rowsPL) {
+      const grossOp = this._findLabelRightValue(rowsPL, [
+        'Gross Operating Income',
+        'Gross Potential Income (GPR)',
+        'Gross Potential Income',
+        'Total Income'
+      ]);
+      const totalOpEx = this._findLabelRightValue(rowsPL, ['Total Operating Expenses', 'Total OpEx', 'Operating Expenses']);
+      const totalNonOpEx = this._findLabelRightValue(rowsPL, ['Total Non-Operating Expenses', 'Total Non OpEx', 'Non-Operating Expenses']);
+
+      const g = this._toCleanNumber(grossOp);
+      if (g !== null) out.annual_gross_income = g;
+
+      const o = this._toCleanNumber(totalOpEx);
+      const n = this._toCleanNumber(totalNonOpEx);
+      const ex = (o ?? 0) + (n ?? 0);
+      if (ex > 0) out.annual_expenses = ex;
+    }
+
+    // Debt Service
+    if (rowsDealSummaryV2) {
+      const ds = this._findLabelRightValue(rowsDealSummaryV2, ['Debt Service', 'Annual Debt Service']);
+      const n = this._toCleanNumber(ds);
+      if (n !== null) out.annual_debt_service = n;
+    }
+
+    // If extraction is too thin, treat as not-ADPI and let fallback run
+    if (Object.keys(out).length < 3) return {};
+    return out;
+  },
+
+  _mapGenericLabelValueRows(rows) {
+    // Generic fallback for label/value worksheets & simple header row mapping
     const labelMap = {
       'deal name': 'name',
       'property name': 'name',
       'name': 'name',
+
       'address': 'address',
+      'location': 'address',
       'property address': 'address',
+
+      'unit count': 'units',
+      'total units': 'units',
       'units': 'units',
 
       'purchase price': 'purchase_price',
-      'purchase': 'purchase_price',
+      'offer price': 'purchase_price',
+      'asking price': 'purchase_price',
+      'price': 'purchase_price',
 
       'annual gross income': 'annual_gross_income',
+      'gross operating income': 'annual_gross_income',
       'gross income': 'annual_gross_income',
-      'annual income': 'annual_gross_income',
 
       'annual expenses': 'annual_expenses',
+      'total operating expenses': 'annual_expenses',
       'expenses': 'annual_expenses',
 
       'annual debt service': 'annual_debt_service',
@@ -242,34 +363,48 @@ export const dealAnalyzer = {
       'total capex': 'total_capex',
       'capex': 'total_capex',
       'rehab': 'total_capex',
+      'renovations': 'total_capex',
 
       'loan amount': 'loan_amount',
-      'debt amount': 'loan_amount',
+      'senior debt': 'loan_amount',
 
+      'closing cost': 'closing_costs',
       'closing costs': 'closing_costs'
     };
 
-    // 1) Two-column label/value rows
-    for (const row of rows) {
-      const a = row?.[0];
-      const b = row?.[1];
-      const key = norm(a);
-      if (!key) continue;
+    const out = {};
+    const norm = (s) => this._normLabel(s);
+
+    // Pass 1: label/value rows
+    for (const row of (rows || [])) {
+      if (!row || row.length < 2) continue;
+      const key = norm(row[0]);
       const mapped = labelMap[key];
       if (!mapped) continue;
 
-      out[mapped] = toVal(b);
+      let val = null;
+      for (let i = 1; i < row.length; i++) {
+        const v = row[i];
+        if (v === null || v === undefined || String(v).trim() === '') continue;
+        val = v;
+        break;
+      }
+      if (val === null) continue;
+
+      const n = this._toCleanNumber(val);
+      out[mapped] = (n !== null) ? n : String(val).trim();
     }
 
-    // 2) If nothing found, try header-based mapping
-    if (Object.keys(out).length === 0 && rows.length >= 2) {
+    // Pass 2: header-based (row0 headers, row1 values) if out is empty
+    if (Object.keys(out).length === 0 && (rows || []).length >= 2) {
       const headers = (rows[0] || []).map(h => norm(h));
-      const valuesRow = rows[1] || [];
-
+      const values = rows[1] || [];
       headers.forEach((h, idx) => {
         const mapped = labelMap[h];
         if (!mapped) return;
-        out[mapped] = toVal(valuesRow[idx]);
+        const val = values[idx];
+        const n = this._toCleanNumber(val);
+        out[mapped] = (n !== null) ? n : (val ?? '');
       });
     }
 
@@ -328,7 +463,7 @@ export const dealAnalyzer = {
         if (!patch) return;
 
         if (deal) {
-          // Persist analyzer fields onto the deal (non-destructive; analyzer keys + identity)
+          // Persist analyzer fields onto the deal (non-destructive)
           const updatePatch = {
             name: patch.name || deal.name,
             address: patch.address || deal.address,
@@ -369,11 +504,7 @@ export const dealAnalyzer = {
           return;
         }
 
-        const merged = {
-          ...(existing || {}),
-          ...patch
-        };
-
+        const merged = { ...(existing || {}), ...patch };
         const pipelineFields = this._pipelineFieldsFromDeal(merged);
 
         if (existing) {
@@ -400,7 +531,7 @@ export const dealAnalyzer = {
       }
     });
 
-    // File input change (delegated via capture to be safe even if view rerenders)
+    // File input change (delegated via capture to survive rerenders)
     document.addEventListener('change', async (e) => {
       const input = e.target;
       if (!input || input.id !== 'da_spreadsheet') return;
@@ -418,7 +549,7 @@ export const dealAnalyzer = {
         const mapped = await this._importSpreadsheetFile(file);
         this._applyImportedToForm(container, mapped);
 
-        // Update draft snapshot so rerender keeps values even without a selected deal
+        // Persist draft snapshot so rerender keeps values even without a selected deal
         const patch = this._buildDealPatchFromForm(container);
         if (patch) this._setDraft(patch);
 
@@ -465,7 +596,7 @@ export const dealAnalyzer = {
       closing_costs: ''
     };
 
-    // Prefill with analyzer-specific keys first, then fall back to legacy deal keys.
+    // Prefill with analyzer keys first, then fall back to legacy keys
     const vName = this._prefillValue(working, ['name'], '');
     const vAddress = this._prefillValue(working, ['address'], '');
     const vUnits = this._prefillValue(working, ['units'], '');
@@ -486,11 +617,16 @@ export const dealAnalyzer = {
       annual_expenses: toNumber(vExpenses, 0),
       annual_debt_service: toNumber(vDebt, 0),
       total_capex: toNumber(vCapex, 0),
-      loan_amount: toNumber(vLoan, 0)
+      loan_amount: toNumber(vLoan, 0),
+      closing_costs: toNumber(vClosing, 0)
     });
 
-    const titleDealName = selectedDeal?.name ? this._escapeHtml(selectedDeal.name) : (draft?.name ? this._escapeHtml(draft.name) : 'Draft (not saved)');
-    const titleDealAddress = selectedDeal?.address ? this._escapeHtml(selectedDeal.address) : (draft?.address ? this._escapeHtml(draft.address) : '');
+    const titleDealName = selectedDeal?.name
+      ? this._escapeHtml(selectedDeal.name)
+      : (draft?.name ? this._escapeHtml(draft.name) : 'Draft (not saved)');
+    const titleDealAddress = selectedDeal?.address
+      ? this._escapeHtml(selectedDeal.address)
+      : (draft?.address ? this._escapeHtml(draft.address) : '');
 
     const isExisting = !!selectedDeal;
 
@@ -550,12 +686,11 @@ export const dealAnalyzer = {
               ${this._inputRow('Annual debt service', 'da_annual_debt_service', vDebt, 'e.g. 210000')}
               ${this._inputRow('Total CapEx', 'da_total_capex', vCapex, 'e.g. 350000')}
               ${this._inputRow('Loan amount', 'da_loan_amount', vLoan, 'e.g. 1750000')}
-              ${this._inputRow('Closing costs (optional)', 'da_closing_costs', vClosing, 'e.g. 75000')}
+              ${this._inputRow('Closing costs', 'da_closing_costs', vClosing, 'e.g. 75000')}
             </form>
 
             <p class="text-[11px] font-semibold text-slate-400 mt-4">
-              Tip: Spreadsheet import looks for 2-column rows like <span class="font-black">Purchase price | 2500000</span>.
-              CSV/XLSX supported.
+              Tip: ADPI workbooks are detected and mapped across tabs. CSV/XLSX supported.
             </p>
           </div>
 
@@ -633,11 +768,15 @@ export const dealAnalyzer = {
       const gp = normalizeRate(container.querySelector('#da_gp_split')?.value, 0.20);
       const holdYears = normalizePositive(container.querySelector('#da_hold_years')?.value, 5);
 
-      // Profit assumption: use net cash flow * years as a quick proxy (user can refine later)
+      // Profit proxy: use net cash flow * years (you can refine later)
       const totalProfit = Math.max(0, metrics.cashFlow) * holdYears;
       const investedCapital = Math.max(0, metrics.equityRequired);
 
-      const dist = this.calculateWaterfall(totalProfit, { pref_rate: pref, gp_split: gp, hold_years: holdYears }, investedCapital);
+      const dist = this.calculateWaterfall(
+        totalProfit,
+        { pref_rate: pref, gp_split: gp, hold_years: holdYears },
+        investedCapital
+      );
 
       const out = container.querySelector('#da-waterfall-results');
       if (!out) return;
@@ -707,9 +846,9 @@ export const dealAnalyzer = {
     `;
   },
 
-  /**
-   * Calculates the core metrics for a deal.
-   */
+  // -----------------------
+  // Analysis + waterfall
+  // -----------------------
   analyze(deal) {
     const purchasePrice = toNumber(deal.purchase_price, 0);
     const grossIncome = toNumber(deal.annual_gross_income, 0);
@@ -736,10 +875,6 @@ export const dealAnalyzer = {
     };
   },
 
-  /**
-   * Waterfall Distribution Logic (Standard Pref + Promote)
-   * Simplified model (simple pref, no IRR hurdles).
-   */
   calculateWaterfall(profit, terms = {}, investedCapital = 0) {
     const totalProfit = toNumber(profit, 0);
     const capital = toNumber(investedCapital, 0);
