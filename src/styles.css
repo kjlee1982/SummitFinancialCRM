@@ -1,0 +1,83 @@
+/* Summit CRM - Custom Styles & Brand Identity */
+
+:root {
+    /* Brand Colors */
+    --summit-orange: #f97316;
+    --summit-orange-hover: #ea580c;
+    --summit-slate: #0f172a;
+    --summit-slate-light: #1e293b;
+    
+    /* Status Colors */
+    --color-prospect: #6366f1; /* Indigo */
+    --color-qualified: #0ea5e9; /* Sky */
+    --color-committed: #f59e0b; /* Amber */
+    --color-invested: #10b981; /* Emerald */
+}
+
+/* 1. Global View Transitions */
+.view-container {
+    animation: fadeIn 0.3s ease-out;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(5px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* 2. Custom Scrollbar (Professional/Thin) */
+::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #94a3b8;
+}
+
+/* 3. Status Badge Utility Classes */
+/* Used in contacts.js and investors.js */
+.inv-prospect { background-color: #eef2ff; color: #4338ca; border: 1px solid #c7d2fe; }
+.inv-qualified { background-color: #f0f9ff; color: #0369a1; border: 1px solid #bae6fd; }
+.inv-committed { background-color: #fffbeb; color: #b45309; border: 1px solid #fef3c7; }
+.inv-invested { background-color: #ecfdf5; color: #047857; border: 1px solid #d1fae5; }
+.inv-churned { background-color: #fef2f2; color: #b91c1c; border: 1px solid #fee2e2; }
+
+/* Deal Stage Badges */
+.badge-sourced { background-color: #f3f4f6; color: #374151; }
+.badge-underwriting { background-color: #e0f2fe; color: #0369a1; }
+.badge-loi { background-color: #fef3c7; color: #b45309; }
+.badge-closing { background-color: #dcfce7; color: #15803d; }
+
+/* 4. Glassmorphism & Hover Effects */
+.card-hover {
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.card-hover:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+}
+
+/* 5. Dashboard Specifics */
+#view-dashboard .stat-icon-bg {
+    background: rgba(249, 115, 22, 0.1);
+}
+
+/* 6. Utility Helper */
+.hidden {
+    display: none !important;
+}
+
+/* 7. Modal Styling */
+#modal-backdrop {
+    backdrop-filter: blur(4px);
+}
